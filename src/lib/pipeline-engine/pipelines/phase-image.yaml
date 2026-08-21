@@ -1,0 +1,94 @@
+id: phase-image
+display_name: "Phase 角色图生成管线"
+description: "基于 Template.front_view 的 R2I → 四角度 → 四视图"
+version: "1.0"
+
+steps:
+  - id: gen_phase_front
+    type: atomic_workflow
+    workflow_id: qwen-2511-edit-plus
+    description: "以 Template 正面图为参考，应用视觉变化，生成 Phase 正面图"
+    inputs:
+      character_ref_1: ${params.reference_image}
+      composite_prompt: ${params.phase_prompt}
+      scene_prompt: "纯白背景，无任何环境元素"
+      width: 640
+      height: 1440
+      seed: ${params.seed}
+      edit_steps: 4
+      cfg: 1.0
+      lora_name: "Qwen-Image-Edit-2511-Lightning-8steps-V1.0-fp32.safetensors"
+    outputs:
+      phase_front: ${outputs[0].localPath}
+    retry:
+      max: 2
+      delay: 2000
+
+  - id: gen_angle_left
+    type: atomic_workflow
+    workflow_id: qwen-2511-edit-multiangle
+    depends_on: [gen_phase_front]
+    inputs:
+      source_image: ${steps.gen_phase_front.outputs[0]}
+      prompt: "<sks> front-left quarter view eye-level shot medium shot"
+      seed: ${params.seed + 1}
+      steps: 4
+      angle_strength: 1.0
+      lightning_strength: 0.8
+    outputs:
+      angle_image: ${outputs[0].localPath}
+    retry:
+      max: 1
+      delay: 2000
+
+  - id: gen_angle_side
+    type: atomic_workflow
+    workflow_id: qwen-2511-edit-multiangle
+    depends_on: [gen_phase_front]
+    inputs:
+      source_image: ${steps.gen_phase_front.outputs[0]}
+      prompt: "<sks> right side view eye-level shot medium shot"
+      seed: ${params.seed + 2}
+      steps: 4
+      angle_strength: 1.0
+      lightning_strength: 0.8
+    outputs:
+      angle_image: ${outputs[0].localPath}
+    retry:
+      max: 1
+      delay: 2000
+
+  - id: gen_angle_back
+    type: atomic_workflow
+    workflow_id: qwen-2511-edit-multiangle
+    depends_on: [gen_phase_front]
+    inputs:
+      source_image: ${steps.gen_phase_front.outputs[0]}
+      prompt: "<sks> back view eye-level shot medium shot"
+      seed: ${params.seed + 3}
+      steps: 4
+      angle_strength: 1.0
+      lightning_strength: 0.8
+    outputs:
+      angle_image: ${outputs[0].localPath}
+    retry:
+      max: 1
+      delay: 2000
+
+  - id: merge_fourview
+    type: script
+    script: merge_fourview.py
+    depends_on: [gen_phase_front, gen_angle_left, gen_angle_side, gen_angle_back]
+    inputs:
+      front: ${steps.gen_phase_front.outputs[0]}
+      left: ${steps.gen_angle_left.outputs[0]}
+      side: ${steps.gen_angle_side.outputs[0]}
+      back: ${steps.gen_angle_back.outputs[0]}
+      character_name: ${params.phase_name}
+    outputs:
+      merged: ${outputs[0].localPath}
+
+outputs:
+  primary: ${steps.merge_fourview.outputs[0]}
+  intermediates:
+    front: ${steps.gen_phase_front.outputs[0]}

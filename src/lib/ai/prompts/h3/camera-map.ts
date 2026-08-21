@@ -1,0 +1,111 @@
+// ═══════════════════════════════════════════════
+// H3 Camera Vocabulary Mapper (v0.2.0)
+//
+// Reference: MiniMax H3 official VIDEO_PROMPT_WRITING_GUIDE_base_en.md §4.3
+//
+// Format: "the camera {motion_type} {amplitude?} {speed?}"
+//   Motion type: Zoom In/Out, Push/Pull, Pan, Truck, Tilt, Crane, Arc/Orbit,
+//                Tracking, Slither, Dolly Zoom/Zolly, Macro, Static, Handheld
+//   Amplitude: "with small amplitude" | "with large amplitude"
+//   Speed: "at slow speed" | "at fast speed"
+// ═══════════════════════════════════════════════
+
+const MOTION: Record<string, string> = {
+  "zoom in": "zooms in", "zoom out": "zooms out",
+  "推镜": "zooms in", "拉镜": "zooms out",
+  "push in": "pushes in", "push": "pushes in",
+  "pull out": "pulls out", "pull": "pulls out",
+  "dolly in": "pushes in", "dolly out": "pulls out",
+  "pan left": "pans left", "pan right": "pans right", "pan": "pans left",
+  "truck left": "trucks left", "truck right": "trucks right",
+  "tilt up": "tilts up", "tilt down": "tilts down",
+  "crane up": "cranes up", "crane down": "cranes down",
+  "pedestal up": "pedestals up", "pedestal down": "pedestals down",
+  "arc": "arcs around the subject", "arc shot": "arcs around the subject",
+  "orbit": "arcs around the subject", "orbit left": "arcs around the subject", "orbit right": "arcs around the subject",
+  "tracking": "tracks the moving subject", "tracking shot": "tracks the moving subject",
+  "follow": "tracks the moving subject",
+  "static": "holds a static shot", "still": "holds a static shot",
+  "固定": "holds a static shot", "静止": "holds a static shot",
+  "shake slight": "shakes slightly", "shake strong": "shakes strongly",
+  "handheld": "shakes slightly as a handheld shot",
+  "手持": "shakes slightly as a handheld shot",
+  "pov": "shows the subject's point of view",
+  "roll cw": "rolls clockwise around the lens axis",
+  "roll ccw": "rolls counterclockwise around the lens axis",
+  "slither": "slithers horizontally on a track", "slither left": "slithers left on a track", "slither right": "slithers right on a track",
+  "dolly zoom": "performs a dolly zoom", "zolly": "performs a dolly zoom", "dolly-zoom": "performs a dolly zoom",
+  "macro": "shows an extreme macro close-up",
+};
+
+type AmpModifier = "" | "with small amplitude" | "with large amplitude";
+type SpeedModifier = "" | "at slow speed" | "at fast speed";
+
+/**
+ * Map AICF free-text cameraDirection → H3 official camera vocabulary.
+ *
+ * Parsing: [motion_type] [speed?] [amplitude?]
+ *
+ * Examples:
+ *   "static"          → "the camera holds a static shot"
+ *   "push in"         → "the camera pushes in with small amplitude at slow speed"
+ *   "push in fast"    → "the camera pushes in with small amplitude at fast speed"
+ *   "pan left large"  → "the camera pans left with large amplitude at slow speed"
+ *   "push in fast large" → "the camera pushes in with large amplitude at fast speed"
+ */
+export function mapCameraDirection(raw: string): string {
+  const lower = raw.toLowerCase().trim();
+  if (!lower) return "the camera holds a static shot";
+
+  // Parse tokens — extract speed/amplitude modifiers first
+  const tokens = lower.split(/\s+/);
+  const SPEED_MAP: Record<string, SpeedModifier> = {
+    "slow": "at slow speed", "fast": "at fast speed",
+    "慢": "at slow speed", "快": "at fast speed",
+  };
+  const AMP_MAP: Record<string, AmpModifier> = {
+    "small": "with small amplitude", "large": "with large amplitude",
+    "微": "with small amplitude", "大": "with large amplitude",
+  };
+
+  // Strip speed/amplitude tokens first (they may precede the motion type)
+  let speed: SpeedModifier = "";
+  let amplitude: AmpModifier = "";
+  const motionTokens: string[] = [];
+  for (const t of tokens) {
+    if (!speed && SPEED_MAP[t]) { speed = SPEED_MAP[t]; continue; }
+    if (!amplitude && AMP_MAP[t]) { amplitude = AMP_MAP[t]; continue; }
+    motionTokens.push(t);
+  }
+
+  // Match motion type from remaining tokens
+  let motionType = "";
+  if (motionTokens.length > 0) {
+    for (let len = Math.min(3, motionTokens.length); len >= 1; len--) {
+      const phrase = motionTokens.slice(0, len).join(" ");
+      if (MOTION[phrase]) { motionType = MOTION[phrase]; break; }
+    }
+    if (!motionType) {
+      for (const [key, val] of Object.entries(MOTION)) {
+        if (motionTokens.join(" ").startsWith(key)) { motionType = val; break; }
+      }
+    }
+  }
+
+  if (!motionType) {
+    return `the camera: [Raw: ${raw}]`;
+  }
+
+  // Apply default modifiers based on motion type
+  const needsAmp = !["holds", "shows", "shakes"].some(k => motionType.includes(k));
+  const needsSpeed = !["holds", "shows"].some(k => motionType.includes(k));
+
+  if (!amplitude && needsAmp) amplitude = "with small amplitude";
+  if (!speed && needsSpeed) speed = "at slow speed";
+
+  const parts = [`the camera ${motionType}`];
+  if (amplitude) parts.push(amplitude);
+  if (speed) parts.push(speed);
+
+  return parts.join(" ");
+}
