@@ -53,7 +53,14 @@ export default function CharactersPage({
   const [episodes, setEpisodes] = useState<Episode[]>([]);
   const [loading, setLoading] = useState(true);
   const [extracting, setExtracting] = useState(false);
-  const [activeTab, setActiveTab] = useState<"template" | "phase" | "episodes">("template");
+  const [activeTab, setActiveTab] = useState<"template" | "phase" | "episodes">(() => {
+    const saved = (typeof sessionStorage !== "undefined" ? sessionStorage.getItem("characters_activeTab") : null) as
+      | "template"
+      | "phase"
+      | "episodes"
+      | null;
+    return saved && ["template", "phase", "episodes"].includes(saved) ? saved : "template";
+  });
 
   const getModelConfig = useModelStore((s) => s.getModelConfig);
   const textGuard = useModelGuard("text");
@@ -71,6 +78,15 @@ export default function CharactersPage({
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Persist the active tab so a page refresh keeps the current tab (visual phase / EP roles, etc.)
+  useEffect(() => {
+    try {
+      sessionStorage.setItem("characters_activeTab", activeTab);
+    } catch {
+      // sessionStorage unavailable (private mode, etc.) — ignore
+    }
+  }, [activeTab]);
 
   const templateChars = useMemo(
     () => characters.filter((c) => !c.episodeId && !c.phaseName && (c.scope === "main" || c.scope === "guest")),
@@ -189,12 +205,19 @@ export default function CharactersPage({
     if (!textGuard()) return;
     setEnriching(true);
     try {
-      await apiFetch(`/api/projects/${projectId}/characters/enrich-phases`, {
+      const res = await apiFetch(`/api/projects/${projectId}/characters/enrich-phases`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ modelConfig: getModelConfig() }),
+        body: JSON.stringify({ modelConfig: getModelConfig(), language: locale }),
       });
-      toast.success("角色视觉更新完成");
+      const data = await res.json();
+      const updated = data.updated ?? 0;
+      const failures: string[] = data.failures ?? [];
+      toast.success(
+        failures.length > 0
+          ? `角色视觉更新完成：${updated} 个阶段已更新，${failures.length} 个角色失败（${failures.join("、")}）`
+          : `角色视觉更新完成：${updated} 个阶段已更新`
+      );
     } catch {
       toast.error("角色视觉更新失败");
     }

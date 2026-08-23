@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { projects, characters, episodes, episodeCharacters } from "@/lib/db/schema";
-import { eq, and, or, isNull, isNotNull } from "drizzle-orm";
+import { projects, characters, episodes } from "@/lib/db/schema";
+import { eq, and, isNull, isNotNull, or } from "drizzle-orm";
 import { getUserIdFromRequest } from "@/lib/get-user-id";
 import { generateText } from "ai";
 import { createLanguageModel } from "@/lib/ai/ai-sdk";
@@ -11,7 +11,6 @@ import type { ProviderConfig } from "@/lib/ai/ai-sdk";
 export const maxDuration = 1200;
 
 interface Enrichment {
-  characterName: string;
   phaseName: string;
   description: string;
   visualHint: string;
@@ -32,6 +31,17 @@ function parseEnrichments(text: string): Enrichment[] | null {
   return null;
 }
 
+function epAppears(
+  ep: { title?: string; description?: string | null; idea?: string | null },
+  name: string
+): boolean {
+  return (
+    (ep.title || "").includes(name) ||
+    (ep.description || "").includes(name) ||
+    (ep.idea || "").includes(name)
+  );
+}
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -50,6 +60,7 @@ export async function POST(
 
   const body = (await request.json()) as {
     modelConfig: { text: ProviderConfig | null };
+    language?: "zh" | "en";
   };
 
   if (!body.modelConfig?.text) {
@@ -67,7 +78,16 @@ export async function POST(
     .orderBy(characters.baseName, characters.phaseName);
 
   if (phaseChars.length === 0) {
-    return NextResponse.json({ phases: [], count: 0 });
+    return NextResponse.json({ characters: 0, updated: 0, failures: [] });
+  }
+
+  // Group phase rows by baseName (one LLM call per base character)
+  const groups = new Map<string, (typeof phaseChars)[number][]>();
+  for (const pc of phaseChars) {
+    const key = pc.baseName || pc.name;
+    const list = groups.get(key) || [];
+    list.push(pc);
+    groups.set(key, list);
   }
 
   const templateChars = await db
@@ -80,136 +100,148 @@ export async function POST(
       or(eq(characters.scope, "main"), eq(characters.scope, "guest")),
     ));
 
-  const epCharRows = await db
-    .select({
-      episodeId: episodeCharacters.episodeId,
-      charName: characters.name,
-    })
-    .from(episodeCharacters)
-    .innerJoin(characters, eq(episodeCharacters.characterId, characters.id))
-    .where(eq(characters.projectId, projectId));
-
-  const charsByEp = new Map<string, string[]>();
-  for (const row of epCharRows) {
-    const list = charsByEp.get(row.episodeId) || [];
-    list.push(row.charName);
-    charsByEp.set(row.episodeId, list);
-  }
-
   const allEps = await db
     .select()
     .from(episodes)
     .where(eq(episodes.projectId, projectId))
     .orderBy(episodes.sequence);
 
-  const epSummaries = allEps
-    .map((ep) => {
-      const charList = charsByEp.get(ep.id) || [];
-      const charStr = charList.length > 0 ? `角色：${charList.join("、")}` : "";
-      return `EP.${ep.sequence}: ${ep.title} - ${ep.description || ""}${charStr ? `\n${charStr}` : ""}`;
-    })
-    .join("\n\n");
-
-  const isZh = /[一-鿿]/.test(phaseChars[0]?.name || "");
-
-  const templateBlock = templateChars
-    .map((c) => `- ${c.name}（${c.scope === "main" ? "主角" : "配角"}）: ${(c.description || "").slice(0, 100)}`)
-    .join("\n");
-
-  const phaseBlock = phaseChars
-    .map((pc) => {
-      return `- ${pc.baseName || pc.name} / ${pc.phaseName}：${pc.episodeSequences || ""}
-  current description：${pc.description || "（空）"}
-  current visualHint：${pc.visualHint || "（空）"}`;
-    })
-    .join("\n\n");
-
-  const prompt = isZh
-    ? `为以下每个视觉阶段角色补充 description 和 visualHint。
-
-规则：
-1. 不要修改已有字段
-2. description 2-3句，引用剧情
-3. visualHint 10-15字，逗号分隔
-
-[Template 角色]
-${templateBlock}
-
-[视觉阶段列表]
-${phaseBlock}
-
-[分集概要]
-${epSummaries}
-
-输出 JSON：
-{
-  "phaseEnrichments": [...]
-}`
-    : `Enrich each phase character with description and visualHint.
-
-Rules:
-1. Do not modify existing fields
-2. description 2-3 sentences referencing story
-3. visualHint 10-15 chars comma separated
-
-[Template Characters]
-${templateBlock}
-
-[Phase List]
-${phaseBlock}
-
-[Episode Summaries]
-${epSummaries}
-
-Output JSON:
-{
-  "phaseEnrichments": [...]
-}`;
+  const isZh = body.language ? body.language === "zh" : /[一-鿿]/.test(phaseChars[0]?.name || "");
 
   const model = createLanguageModel(body.modelConfig.text);
-  const jsonMode = { openai: { response_format: { type: "json_object" as const } } };
-  const system = isZh ? "你是一位角色设计师。根据剧情上下文为视觉阶段角色补充描述。" : "You are a character designer. Enrich phase descriptions based on story context.";
+  const jsonMode = { openai: { response_format: { type: "json_object" as const  } } };
 
-  try {
-    const result = await generateText({ model, system, prompt, providerOptions: jsonMode });
-    let enrichments = parseEnrichments(result.text);
-    if (!enrichments) {
-      const retry = await generateText({
-        model, system,
-        prompt: prompt + "\n\nIMPORTANT: Return COMPLETE, VALID JSON.",
-        providerOptions: jsonMode,
-      });
-      enrichments = parseEnrichments(retry.text);
-    }
-    if (!enrichments) {
-      return NextResponse.json({ error: "Failed to parse LLM response" }, { status: 500 });
-    }
+  const system = isZh
+    ? "你是一位角色设计师。基于剧情上下文，为视觉阶段角色补充或优化 description 和 visualHint；若现有 description 为空或质量不足（过短/空泛/缺剧情锚点），请从专业视角重新生成，而非简单追加。"
+    : "You are a character designer. Enrich or optimize the description and visualHint for the visual-phase characters from the story context; if the existing description is empty or low-quality (too short / vague / lacks story anchor), regenerate it from a professional perspective rather than simply appending.";
 
-    let updatedCount = 0;
-    for (const en of enrichments) {
-      const nameKey = (en.characterName || "").toLowerCase().trim();
-      const phaseKey = (en.phaseName || "").toLowerCase().trim();
-      if (!nameKey || !phaseKey) continue;
-      const match = phaseChars.find(
-        (pc) =>
-          (pc.baseName || pc.name).toLowerCase().trim() === nameKey &&
-          (pc.phaseName || "").toLowerCase().trim() === phaseKey
+  let updatedCount = 0;
+  const failures: string[] = [];
+
+  // Serial per-character LLM calls (one per baseName)
+  for (const [baseName, chars] of groups) {
+    const tpl = templateChars.find(
+      (t) => (t.baseName || t.name) === baseName
+    );
+    const templateDesc = tpl?.description || "";
+
+    // Episodes this character actually appears in (name match against title/description/idea)
+    const appearingEps = allEps.filter((ep) => epAppears(ep, baseName));
+    const epContext = appearingEps
+      .map((ep) => `EP.${ep.sequence}: ${ep.title || ""} - ${ep.description || ""}\n${ep.idea || ""}`)
+      .join("\n\n");
+
+    const phaseBlock = chars
+      .map((pc) =>
+        isZh
+          ? `- ${pc.phaseName} | 现 description: ${pc.description || "（空）"} | 现 visualHint: ${pc.visualHint || "（空）"}`
+          : `- ${pc.phaseName} | current description: ${pc.description || "(empty)"} | current visualHint: ${pc.visualHint || "(empty)"}`
+      )
+      .join("\n");
+
+    const prompt = isZh
+      ? `[角色] ${baseName}
+
+[角色定义]
+${templateDesc}
+（其中含风格/材质/光位提示，需保留）
+
+[视觉阶段]（共 ${chars.length} 个，每个阶段输出一条）
+${phaseBlock}
+
+[分集上下文]（该角色实际出场的集）
+${epContext}
+
+[输出要求]
+1. 每个视觉阶段恰好输出一条，不遗漏、不新增。
+2. description：2-3 句，必须引用该角色出场集的剧情；现有 description 为空或质量不足时，从专业角色设计师视角重新生成。
+3. 保留角色定义中的风格/材质/光位提示（3D国漫渲染风格、细腻材质、体积光）。
+4. visualHint：10-15 字，逗号分隔。
+5. 只输出 JSON：
+{
+  "phaseEnrichments": [
+    { "phaseName": "阶段名", "description": "...", "visualHint": "..." }
+  ]
+}`
+      : `[Character] ${baseName}
+
+[Character Definition]
+${templateDesc}
+(style / material / lighting cues included — must be preserved)
+
+[Visual Phases] (${chars.length} total, output one entry per phase)
+${phaseBlock}
+
+[Episode Context] (episodes this character actually appears in)
+${epContext}
+
+[Output]
+1. Output exactly one entry per visual phase — no omissions, no additions.
+2. description: 2-3 sentences, must reference the story from this character's appearing episodes; if the existing description is empty or low-quality, regenerate from a professional character-designer perspective.
+3. Preserve the style/material/lighting cues from the character definition (e.g. 3D guoman render style, fine materials, volumetric light).
+4. visualHint: 10-15 chars, comma-separated.
+5. Output JSON only:
+{
+  "phaseEnrichments": [
+    { "phaseName": "phase", "description": "...", "visualHint": "..." }
+  ]
+}`;
+
+    let enrichments: Enrichment[] | null = null;
+    try {
+      let result = await generateText({ model, system, prompt, providerOptions: jsonMode });
+      enrichments = parseEnrichments(result.text);
+      if (!enrichments) {
+        const retry = await generateText({
+          model,
+          system,
+          prompt: prompt + "\n\nIMPORTANT: Return COMPLETE, VALID JSON.",
+          providerOptions: jsonMode,
+        });
+        enrichments = parseEnrichments(retry.text);
+      }
+      if (!enrichments) {
+        failures.push(baseName);
+        continue;
+      }
+
+      // Coverage check: every phaseName in this group must be present; targeted retry for missing ones
+      const expected = new Set(
+        chars.map((c) => (c.phaseName || "").toLowerCase().trim())
       );
-      if (!match) continue;
-      await db
-        .update(characters)
-        .set({ description: en.description, visualHint: en.visualHint })
-        .where(eq(characters.id, match.id));
-      updatedCount++;
-    }
+      const returned = new Set(
+        enrichments.map((e) => (e.phaseName || "").toLowerCase().trim())
+      );
+      const missing = [...expected].filter((p) => !returned.has(p));
+      if (missing.length > 0) {
+        const retryPrompt =
+          prompt +
+          `\n\nMissing phases (must include these): ${missing.join(", ")}.\nReturn complete valid JSON including all ${chars.length} phases.`;
+        const retry2 = await generateText({ model, system, prompt: retryPrompt, providerOptions: jsonMode });
+        const reparsed = parseEnrichments(retry2.text);
+        if (reparsed) enrichments = reparsed;
+      }
 
-    return NextResponse.json({
-      phases: enrichments,
-      total: enrichments.length,
-      updated: updatedCount,
-    });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "Unknown error";
-    return NextResponse.json({ error: msg }, { status: 500 });
+      // Match by phaseName only (unique within a character)
+      for (const en of enrichments) {
+        const phaseKey = (en.phaseName || "").toLowerCase().trim();
+        const match = chars.find((c) => (c.phaseName || "").toLowerCase().trim() === phaseKey);
+        if (!match) continue;
+        await db
+          .update(characters)
+          .set({ description: en.description, visualHint: en.visualHint })
+          .where(eq(characters.id, match.id));
+        updatedCount++;
+      }
+    } catch (err) {
+      failures.push(baseName);
+      console.error(`[enrich-phases] ${baseName} error:`, err);
+    }
   }
+
+  return NextResponse.json({
+    characters: groups.size,
+    updated: updatedCount,
+    failures,
+  });
 }
