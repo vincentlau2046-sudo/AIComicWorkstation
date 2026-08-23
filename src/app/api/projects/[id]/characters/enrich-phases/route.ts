@@ -155,11 +155,13 @@ ${epContext}
 
 [输出要求]
 1. 每个视觉阶段恰好输出一条，不遗漏、不新增。
-2. description 必须是「视觉角色卡」，格式参照角色定义范本：
-   [风格前缀（如 3D国漫渲染风格，细腻材质与体积光）]——性别，年龄区间。
-   身姿…，面部…，皮肤…，发型…，服装（必须含足部描述：鞋/靴子/光脚等）…，色彩调色板：…。
-   - 必须保留角色定义中的风格/材质/光位提示。
-   - 用 [分集上下文] 推断该阶段角色的**视觉状态**（该时期/节点的外观变化），**不要**把剧情事件、集数编号写进 description。
+2. description 写作规则（视觉角色卡）：
+   - description 必须是「视觉角色卡」，格式参照模板角色定义（继承项目视觉风格）：
+     [风格前缀（继承项目视觉风格，如「3D国漫渲染风格，细腻材质与体积光」）]——性别，年龄区间。
+     身姿…，面部…，皮肤…，发型…，服装（必须含足部：鞋/靴子/光脚等）…，色彩调色板：…。
+   - description 只描述「长什么样」，不写「发生了什么」。剧情/生平由 [分集上下文] 表达（推断该阶段的视觉状态）。
+   - 禁止在 description 中出现「EP.x」或剧情事件（如「斩赵文」「整饬贪腐」）。
+   - 参考实例：「3D国漫渲染风格，细腻材质与体积光——男，16-18岁。清瘦挺拔，带乡野少年稚气。圆脸，眼廓明亮，皮肤白皙未历风霜。束发于顶，木簪固定，几缕碎发垂落额前。粗布长衫洗白，腰系麻绳，足蹬草鞋沾泥。色彩调色板：青灰、米白、土黄。」
 3. 禁止在 description 中出现「EP.x」「斩赵文」「整饬贪腐」等剧情/集数引用。
 4. visualHint = 2-4 词的外貌标识符（描述外貌而非动作，对齐导入阶段定义，如「龙袍金冠阴沉脸」）。
 5. t2iStructure = 7 字段 JSON（age/subject/body/face/hair/clothing/lighting，英文标签，字段值随语言），对齐 batch-generate。
@@ -192,11 +194,13 @@ ${epContext}
 
 [Output]
 1. Output exactly one entry per visual phase — no omissions, no additions.
-2. description MUST be a "visual character card", following the character-definition template:
-   [style prefix (e.g. 3D guoman render style, fine materials, volumetric light)] — gender, age range.
-   Build…, face…, skin…, hair…, clothing (must include footwear: shoes/boots/bare feet, etc.)…, color palette: …
-   - Preserve the style/material/lighting cues from the character definition.
-   - Use [Episode Context] to infer the character's VISUAL STATE at that phase (appearance at that point in time); do NOT write plot events or EP numbers into description.
+2. description writing rules (visual character card):
+   - description MUST be a "visual character card", following the template character definition (inheriting the project visual style):
+     [style prefix (inheriting project visual style, e.g. "3D guoman render style, fine materials, volumetric light")] — gender, age range.
+     Build…, face…, skin…, hair…, clothing (must include footwear: shoes/boots/bare feet, etc.)…, color palette: …
+   - description describes "what they look like", not "what happened". Plot/life is carried by [Episode Context] (infer the visual state of that phase).
+   - Do NOT write "EP.x" or plot events (e.g. "executed Zhao Wen", "rectified corruption") into description.
+   - Reference example: "3D guoman render style, fine materials and volumetric light — male, 16-18 years old. Slender and upright, with a country youth's innocence. Round face, bright eyes, fair unweathered skin. Hair bound at the crown, fixed with a wooden hairpin, a few strands falling on the forehead. Coarse-cloth long gown washed white, hemp rope at the waist, straw shoes caked with mud. Color palette: blue-grey, off-white, earthy yellow."
 3. Do NOT reference "EP.x" or plot events (e.g. "executed Zhao Wen") in description.
 4. visualHint = a 2-4 word APPEARANCE identifier (describes appearance, not actions; e.g. "龙袍金冠阴沉脸" / "silver hair red coat"), aligned with the import-phase definition.
 5. t2iStructure = 7-field JSON (age/subject/body/face/hair/clothing/lighting; English tags, values follow the language), aligned with batch-generate.
