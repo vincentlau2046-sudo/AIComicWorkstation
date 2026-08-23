@@ -51,25 +51,35 @@ export async function POST(
 
   const results: Array<{ id: string; name: string; status: string; error?: string }> = [];
 
-  // T2I 结构输出语言跟随语言选择：zh → 中文标签，en/未指定 → 英文
+  // 步骤2：基于 EP 链的 T2I structure 方式，为 template 角色卡生成 t2i_structure
+  // 输入 = 角色 description + visualHint（不含 EP 剧本内容）
   const language = body.language;
   const t2iSystem = language === "zh"
-    ? "根据角色描述，用 [标签] 格式生成结构化的 Qwen Image 2512 提示词。所有 [标签] 及其内容必须用中文输出。只返回提示词文本。"
-    : "Generate a structured Qwen Image 2512 prompt using [tags] format.";
+    ? "根据角色档案（description + visualHint），生成该角色的 t2iStructure JSON。" +
+      "输出必须是 JSON 对象，含 7 个字段：age/subject/body/face/hair/clothing/lighting。" +
+      "标签名用英文，字段值用中文。必须保留 description 中的风格/材质/光照提示（如 3D 国漫渲染风格、细腻材质、体积光）。只返回 JSON。"
+    : "From the character profile (description + visualHint), generate the character's t2iStructure JSON. " +
+      "Output MUST be a JSON object with 7 fields: age/subject/body/face/hair/clothing/lighting. " +
+      "Tag names in English, field values in the source language. Preserve the style/material/lighting hints from the description. Return JSON only.";
 
   if (body.type === "t2i_prompt" && body.modelConfig?.text) {
     const model = createLanguageModel(body.modelConfig.text);
     for (const item of targetChars) {
       try {
-        const prompt = buildCharacterFrontViewPrompt(item.description || item.name, item.name, language);
-        const result = await generateText({
-          model,
-          system: t2iSystem,
-          prompt,
-        });
-        const t2iText = result.text.trim();
-        if (t2iText) {
-          await db.update(characters).set({ t2iStructure: t2iText }).where(eq(characters.id, item.id));
+        // 对齐 EP 链：t2iStructure 槽位传已存结构（null 则走散文回退），description 槽位传描述
+        let prompt = buildCharacterFrontViewPrompt(item.t2iStructure ?? null, item.description || item.name);
+        // 输入补充 visualHint（角色 DB 有用字段），不含 EP 剧本内容
+        if (item.visualHint) {
+          prompt = `${prompt}\n[visualHint] ${item.visualHint}`;
+        }
+        const result = await generateText({ model, system: t2iSystem, prompt });
+        // 保存 JSON（而非纯文本），让 builder 的结构化路径可解析
+        const t2iJson = result.text.trim();
+        try {
+          JSON.parse(t2iJson); // 校验是合法 JSON 才入库
+          await db.update(characters).set({ t2iStructure: t2iJson }).where(eq(characters.id, item.id));
+        } catch {
+          console.warn(`[batch-generate] t2iStructure 不是合法 JSON（${item.name}），跳过入库`);
         }
         results.push({ id: item.id, name: item.name, status: "ok" });
       } catch (err) {

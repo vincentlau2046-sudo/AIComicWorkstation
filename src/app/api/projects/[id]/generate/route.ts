@@ -173,10 +173,9 @@ export async function POST(
     payload?: Record<string, unknown>;
     modelConfig?: ModelConfig;
     episodeId?: string;
-    language?: "zh" | "en";
   };
 
-  const { action, payload, modelConfig, episodeId, language } = body;
+  const { action, payload, modelConfig, episodeId } = body;
   console.log(`[Generate] action=${action}, projectId=${projectId}, episodeId=${episodeId || "none"}`);
 
   if (action === "script_outline") {
@@ -196,7 +195,7 @@ export async function POST(
   }
 
   if (action === "single_character_image") {
-    return handleSingleCharacterImage(payload, modelConfig, language);
+    return handleSingleCharacterImage(payload, modelConfig);
   }
 
   if (action === "single_phase_image") {
@@ -204,7 +203,7 @@ export async function POST(
   }
 
   if (action === "batch_character_image") {
-    return handleBatchCharacterImage(projectId, modelConfig, episodeId, language);
+    return handleBatchCharacterImage(projectId, modelConfig, episodeId);
   }
 
   if (action === "shot_split") {
@@ -1116,8 +1115,7 @@ async function handleCharacterExtract(
 
 async function handleSingleCharacterImage(
   payload?: Record<string, unknown>,
-  modelConfig?: ModelConfig,
-  language?: "zh" | "en"
+  modelConfig?: ModelConfig
 ) {
   const characterId = payload?.characterId as string;
   if (!characterId) {
@@ -1185,7 +1183,7 @@ async function handleSingleCharacterImage(
   }
 
   // ═══ Template 和 Guest 共用 T2I 路径 ═══
-  const prompt = buildCharacterFrontViewPrompt(character.t2iStructure ?? null, character.description || character.name, language);
+  const prompt = buildCharacterFrontViewPrompt(character.t2iStructure ?? null, character.description || character.name);
 
   try {
     const rawImagePath = await ai.generateImage(prompt, {
@@ -1360,8 +1358,7 @@ async function handleSinglePhaseImage(
 async function handleBatchCharacterImage(
   projectId: string,
   modelConfig?: ModelConfig,
-  episodeId?: string,
-  language?: "zh" | "en"
+  episodeId?: string
 ) {
   if (!modelConfig?.image) {
     return NextResponse.json(
@@ -1434,7 +1431,7 @@ async function handleBatchCharacterImage(
         }
 
         // ═══ Template / Guest 行 → T2I ═══
-        const prompt = buildCharacterFrontViewPrompt(character.t2iStructure ?? null, character.description || character.name, language);
+        const prompt = buildCharacterFrontViewPrompt(character.t2iStructure ?? null, character.description || character.name);
         const rawImagePath = await ai.generateImage(prompt, {
           size: "2560x1440",
           aspectRatio: "16:9",

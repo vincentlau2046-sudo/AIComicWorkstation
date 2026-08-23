@@ -214,7 +214,8 @@ ${sourceText}
   const t2iModel = createLanguageModel(body.modelConfig.text);
   let t2iCount = 0;
   for (const uc of updatedChars) {
-    const t2iPrompt = buildCharacterFrontViewPrompt(uc.description, uc.name, language);
+    // 对齐 EP 链：t2iStructure 槽位（重新提取时尚未生成，传 null → 散文回退），description 槽位传描述
+    const t2iPrompt = buildCharacterFrontViewPrompt(null, uc.description || uc.name);
     const t2iResult = await generateText({
       model: t2iModel,
       system: t2iSystem,

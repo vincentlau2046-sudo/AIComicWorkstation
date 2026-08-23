@@ -10,37 +10,28 @@ const FRONT_VIEW_TEMPLATE = {
   quality_tag:     `[quality: sharp focus, high detail, character reference sheet]`,
 } as const;
 
-/** 中文版模板：语言选择为 zh 时使用，T2I structure 输出中文。 */
-const FRONT_VIEW_TEMPLATE_ZH = {
-  subject_tag:     `[角色设定图] [正面视图] [全身] [站立姿势]`,
-  composition:     `[构图: 纵向肖像，全身从头顶到脚底，头部靠近顶部，双脚靠近底部]`,
-  pose_constraint: `[姿势: 自然站立，双臂垂于身体两侧，双脚与肩同宽，表情自然]`,
-  environment:     `[环境: 纯白背景，无阴影]`,
-  quality_tag:     `[画质: 清晰对焦，高细节，角色参考图]`,
-} as const;
 
 /**
- * 构建 ComfyUI gen_front 步骤用的正面图 T2I prompt。
+ * 构建 ComfyUI gen_front 步骤用的正面图 T2I prompt（恢复 AICF 基线）。
  * t2iStructure 优先（结构化标签 → Qwen 2512 精度 +30%），
  * description 作为 fallback + 细节补充。
+ * 标签固定英文（[age]/[subject] 等是 Qwen 训练集高频结构），字段值由 t2iStructure JSON 提供。
  */
 export function buildCharacterFrontViewPrompt(
   t2iStructure: string | null,
-  description: string,
-  language?: "zh" | "en"
+  description: string
 ): string {
-  // 根据语言选择挑选模板与标签：zh → 中文，en/未指定 → 英文
-  const tpl = language === "zh" ? FRONT_VIEW_TEMPLATE_ZH : FRONT_VIEW_TEMPLATE;
-  const zh = language === "zh";
+  // 恢复 AICF：英文模板 + 英文标签
+  const tpl = FRONT_VIEW_TEMPLATE;
   const L = {
-    age:      zh ? "[年龄]" : "[age]",
-    subject:   zh ? "[主体]" : "[subject]",
-    body:      zh ? "[体型]" : "[body]",
-    face:      zh ? "[面部]" : "[face]",
-    hair:      zh ? "[发型]" : "[hair]",
-    clothing:  zh ? "[服装]" : "[clothing]",
-    lighting:   zh ? "[光照]" : "[lighting]",
-    colorOpen: zh ? "[色彩调色板:" : "[color palette:",
+    age:      "[age]",
+    subject:   "[subject]",
+    body:      "[body]",
+    face:      "[face]",
+    hair:      "[hair]",
+    clothing:  "[clothing]",
+    lighting:   "[lighting]",
+    colorOpen: "[color palette:",
   };
 
   if (t2iStructure) {

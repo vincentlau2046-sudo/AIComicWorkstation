@@ -8,7 +8,7 @@ import { buildCharacterFrontViewPrompt } from "@/lib/ai/prompts/character-image"
 import { copyToUploads } from "@/lib/shot-asset-utils";
 
 export async function handleCharacterImage(task: Task) {
-  const payload = task.payload as { characterId: string; modelConfig?: ModelConfigPayload; language?: "zh" | "en" };
+  const payload = task.payload as { characterId: string; modelConfig?: ModelConfigPayload };
 
   const [character] = await db
     .select()
@@ -19,7 +19,7 @@ export async function handleCharacterImage(task: Task) {
     throw new Error("Character not found");
   }
 
-  const prompt = buildCharacterFrontViewPrompt(character.t2iStructure ?? null, character.description || character.name, payload.language);
+  const prompt = buildCharacterFrontViewPrompt(character.t2iStructure ?? null, character.description || character.name);
 
   const ai = resolveImageProvider(payload.modelConfig);
   const imagePath = await ai.generateImage(prompt, {
