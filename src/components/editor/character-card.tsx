@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useTranslations, useLocale } from "next-intl";
 import { uploadUrl } from "@/lib/utils/upload-url";
 import { useModelStore, type ModelRef } from "@/stores/model-store";
-import { Sparkles, Loader2, Copy, Check, ArrowUpCircle, Trash2, ChevronLeft, ChevronRight, Upload } from "lucide-react";
+import { Sparkles, Loader2, Copy, Check, ArrowUpCircle, Trash2, ChevronLeft, ChevronRight, Upload, Wand2 } from "lucide-react";
 import { InlineModelPicker } from "@/components/editor/model-selector";
 import { apiFetch } from "@/lib/api-fetch";
 import { useModelGuard } from "@/hooks/use-model-guard";
@@ -80,6 +80,7 @@ export function CharacterCard({
   useEffect(() => { setEditR2iStructure(r2iStructure ?? ""); }, [r2iStructure]);
   const [generating, setGenerating] = useState(false);
   const [generatingR2i, setGeneratingR2i] = useState(false);
+  const [generatingT2i, setGeneratingT2i] = useState(false);
   const [lightbox, setLightbox] = useState(false);
   const [copied, setCopied] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -160,6 +161,34 @@ export function CharacterCard({
       toast.error("生成 R2I Prompt 失败");
     }
     setGeneratingR2i(false);
+  }
+
+  async function handleGenerateT2iPrompt() {
+    setGeneratingT2i(true);
+    try {
+      const res = await apiFetch(`/api/projects/${projectId}/characters/${id}/t2i-prompt`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modelConfig: { text: getModelConfig().text }, language: locale }),
+      });
+      const data = await res.json();
+      if (data.prompt) {
+        setEditT2iStructure(data.prompt);
+        // 端点仅在 JSON 合法时入库；否则由卡片 PATCH 兜底保存
+        if (!data.saved) {
+          await apiFetch(`/api/projects/${projectId}/characters/${id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ t2iStructure: data.prompt }),
+          });
+        }
+        onUpdate();
+      }
+    } catch (err) {
+      console.error("T2I prompt error:", err);
+      toast.error("生成 T2I Prompt 失败");
+    }
+    setGeneratingT2i(false);
   }
 
   async function handleUploadImage(e: React.ChangeEvent<HTMLInputElement>) {
@@ -321,25 +350,47 @@ export function CharacterCard({
         />
         {!phaseName && (
           <details className="text-xs">
-            <summary className="cursor-pointer text-muted-foreground hover:text-foreground">T2I Structure (Qwen structured prompt)</summary>
-            <Textarea
-              value={editT2iStructure}
-              onChange={(e) => setEditT2iStructure(e.target.value)}
-              onBlur={handleSave}
-              placeholder='[age] 71-year-old, frail
+            <summary className="flex cursor-pointer items-center gap-1.5 font-semibold text-[--text-primary]">
+              <Wand2 className="h-3.5 w-3.5" />
+              T2I Prompt (Qwen structured prompt)
+            </summary>
+            <div className="mt-2 space-y-2">
+              <Textarea
+                value={editT2iStructure}
+                onChange={(e) => setEditT2iStructure(e.target.value)}
+                onBlur={handleSave}
+                placeholder='[age] 71-year-old, frail
 [subject] male, 162cm, thin, hunched
 [body] narrow shoulders, loose skin, bowed back
 [face] deep wrinkles, sunken cheeks, age spots
 [hair] sparse white hair, wispy beard
 [clothing] faded dragon robe, too large, sags at shoulders
 [lighting] warm front light, soft shadows'
-              className="h-24 resize-none text-xs font-mono"
-            />
+                className="h-24 resize-none text-xs font-mono"
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleGenerateT2iPrompt}
+                disabled={generatingT2i}
+                className="w-full text-[11px]"
+              >
+                {generatingT2i ? (
+                  <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+                ) : (
+                  <Wand2 className="mr-1.5 h-3 w-3" />
+                )}
+                生成 T2I 提示词
+              </Button>
+            </div>
           </details>
         )}
         {phaseName && (
           <details className="text-xs">
-            <summary className="cursor-pointer text-muted-foreground hover:text-foreground">R2I Prompt (Phase reference image)</summary>
+            <summary className="flex cursor-pointer items-center gap-1.5 font-semibold text-[--text-primary]">
+              <Wand2 className="h-3.5 w-3.5" />
+              R2I Prompt (Phase reference image)
+            </summary>
             <div className="mt-2 space-y-2">
               <Textarea
                 value={editR2iStructure}
@@ -348,22 +399,20 @@ export function CharacterCard({
                 placeholder="点击下方按钮生成 R2I Prompt..."
                 className="h-24 resize-none text-xs font-mono"
               />
-              {!editR2iStructure && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleGenerateR2iPrompt}
-                  disabled={generatingR2i}
-                  className="w-full text-[11px]"
-                >
-                  {generatingR2i ? (
-                    <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
-                  ) : (
-                    <Sparkles className="mr-1.5 h-3 w-3" />
-                  )}
-                  生成 R2I Prompt
-                </Button>
-              )}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleGenerateR2iPrompt}
+                disabled={generatingR2i}
+                className="w-full text-[11px]"
+              >
+                {generatingR2i ? (
+                  <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+                ) : (
+                  <Sparkles className="mr-1.5 h-3 w-3" />
+                )}
+                生成 R2I Prompt
+              </Button>
             </div>
           </details>
         )}
