@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { projects, episodes, characters, episodeCharacters, characterRelations } from "@/lib/db/schema";
-import { eq, and, max, inArray, isNull, isNotNull, or } from "drizzle-orm";
+import { eq, and, max } from "drizzle-orm";
 import { id as genId } from "@/lib/id";
 import { getUserIdFromRequest } from "@/lib/get-user-id";
 import { addImportLog } from "@/lib/import-utils";
 
-export const maxDuration = 60;
+export const maxDuration = 1200;
 
 interface EpisodeData {
   title: string;
@@ -60,9 +60,9 @@ export async function POST(
         description?: string;
         episodeStart?: number;
         episodeEnd?: number;
+        episodeRange?: string;
         triggerEvent: string;
         visualChanges: Record<string, string>;
-        t2iStructure?: Record<string, string>;
         statusChange: string;
       }>;
     }>;
@@ -71,32 +71,13 @@ export async function POST(
 
   await addImportLog(
     projectId, 6, "running",
-    body.regenerate ? "正在重建数据..." : "正在创建数据..."
+    body.regenerate ? "重新导入：追加数据（不清理旧数据）..." : "正在创建数据..."
   );
 
   try {
-    // B.6: Clear before regenerate — delete episode_characters, characters (non-template), episodes
-    if (body.regenerate) {
-      const epIds = await db
-        .select({ id: episodes.id })
-        .from(episodes)
-        .where(eq(episodes.projectId, projectId));
-      const idList = epIds.map((e) => e.id);
-      if (idList.length > 0) {
-        await db.delete(episodeCharacters).where(inArray(episodeCharacters.episodeId, idList));
-      }
-
-      // Delete characters: non-template rows only
-      await db.delete(characters).where(
-        and(
-          eq(characters.projectId, projectId),
-          or(isNotNull(characters.episodeId), isNotNull(characters.phaseName)),
-        )
-      );
-
-      // Delete episodes
-      await db.delete(episodes).where(eq(episodes.projectId, projectId));
-    }
+    // B.6: 重新导入采用"只追加、不清理"策略。
+    // 旧的 episodes / 非 template 角色 / 集-角色链接 全部保留，
+    // 多出来的重复数据由用户在"角色管理"界面手动删减。
 
     // 1. Create all characters (main + guest), build name→id map
     const charIdByName = new Map<string, string>();
@@ -222,14 +203,16 @@ export async function POST(
             baseName: arc.characterName,
             name: `${arc.characterName}（${p.phaseName}）`,
             description: p.description || "",
+            visualHint: (p as any).visualHint || "",
             phaseName: p.phaseName,
             episodeStart: p.episodeStart || p.episodeEnd || 0,
             episodeEnd: p.episodeEnd || p.episodeStart || 0,
-            episodeSequences: (p.episodeStart != null && p.episodeEnd != null && p.episodeStart <= p.episodeEnd)
-              ? Array.from({ length: (p.episodeEnd)! - (p.episodeStart)! + 1 }, (_, i) => (p.episodeStart!) + i).join(",")
-              : "",
+            episodeSequences: p.episodeRange
+              ? p.episodeRange
+              : (p.episodeStart != null && p.episodeEnd != null && p.episodeStart <= p.episodeEnd)
+                ? Array.from({ length: (p.episodeEnd)! - (p.episodeStart)! + 1 }, (_, i) => (p.episodeStart!) + i).join(",")
+                : "",
             visualChanges: typeof p.visualChanges === "string" ? p.visualChanges : (p.visualChanges ? JSON.stringify(p.visualChanges) : null),
-            t2iStructure: p.t2iStructure ? JSON.stringify(p.t2iStructure) : null,
             scope: templateScope,
             episodeId: null,
           });

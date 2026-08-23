@@ -857,14 +857,15 @@ const characterExtractDef: PromptDefinition = {
 
 const IMPORT_CHAR_ROLE_DEFINITION = `你是一位资深角色设计师、摄影指导和美术总监。你的任务是从给定文本中提取所有有名字的角色，估算出现频率，并为每个角色生成专业级视觉规格书。`;
 
-const IMPORT_CHAR_EXTRACTION_RULES = `规则：
-1. 提取文本中每一个被命名的角色
-2. 统计每个角色的大致出现/被提及次数
-3. 被提及2次以上的很可能是主要角色
-4. 合并明显的别名（如"小明"和"明哥"指同一个人）
-5. 为每个角色判定 scope：
+const IMPORT_CHAR_EXTRACTION_RULES = `规则（零遗漏原则）：
+1. 提取文本中每一个被命名的角色——即使仅被提及 1 次、没有对白、只有名字出现也必须提取
+2. 统计每个角色的大致出现/被提及次数（仅用于 scope 分类判断，不作为是否输出的依据）
+3. 合并别名并输出规范化名字：同一个角色使用其在文本中**最正式/最完整**的名字
+   （如"明哥"→"朱元璋"、"老张"→"张师傅"；不要用口头称呼作为正式名）
+4. 为每个角色判定 scope：
    - "main"：核心角色，推动剧情，多集/多场景出现
    - "guest"：有名字、有对白、反复出场的次要角色
+5. 宁可多输出 10 个无关角色，不可遗漏 1 个真实角色——遗漏会导致后续流程角色不一致
 
 ═══ 第一步——识别视觉风格 ═══
 识别文本中声明或隐含的风格：
@@ -898,7 +899,7 @@ const IMPORT_CHAR_OUTPUT_FORMAT = `输出格式——仅JSON对象，不要markd
     {
       "name": "角色名，与文本中出现的一致",
       "frequency": 5,
-      "scope": "main" 或 "guest" 或 "support",
+      "scope": "main" 或 "guest",
       "description": "完整视觉规格——一段密集的段落，遵循以上所有要求",
       "visualHint": "2-4个字的外貌标识符"
     }
@@ -1018,16 +1019,15 @@ const importAssessDef: PromptDefinition = {
 // ─── 5.8. import_characters ──────────────────────────────
 
 const IMPORT_CHARS_ROLE_EN = `You are a senior character designer and script analysis expert. Extract ALL characters from the given text exhaustively — zero omissions.`;
-const IMPORT_CHARS_RULES_EN = `Rules:
-1. Extract every named character
-2. Extract all characters with unique identity/address (e.g. General Li, Doctor Wang)
-3. Extract all characters with dialogue or independent actions
-4. Skip collective/generic terms ("a group of soldiers"), background extras without dialogue/action
-5. Merge aliases (Chongba and Zhu Chongba = same person)
-Scope judgment: main=core plot driver, guest=recurring supporting, support=single-episode cameo
-Visual description coverage: build, face, hair, clothing, weapons, color palette
-Exhaustive extraction — no character left behind.`;
-
+const IMPORT_CHARS_RULES_EN = `Rules (zero omission):
+1. Extract EVERY named character -- even those mentioned once, without dialogue, or named in passing
+2. Count approximate mentions per character (informational only -- for scope classification, not for filtering)
+3. Merge aliases -> output the MOST FORMAL / FULL name for each character
+   (e.g. "Chongba" -> "Zhu Yuanzhang", "Johnny" -> "Jonathan Smith")
+4. Scope:
+   - main = core plot driver
+   - guest = named recurring secondary character
+5. Better to output 10 extra names than miss one real character -- omission breaks downstream consistency`;
 const IMPORT_CHARS_OUTPUT_EN = `Output: JSON object with characters array [name, frequency, scope, description, visualHint] and optional relationships array.
 Only JSON. No markdown. No commentary.`;
 
@@ -1150,9 +1150,10 @@ const IMPORT_ARC_ROLE_EN = `You are a senior character designer and script analy
 Your task: read the character list and episode summaries, identify which characters undergo significant cross-episode changes, and design "character arcs" — key state nodes along the story timeline.`;
 
 const IMPORT_ARC_DETECT_EN = `=== Which characters need arc design ===
-Needs arc: all scope="main" and scope="guest" characters. Each at least 2 phases.
+Needs arc: ALL scope="main" and scope="guest" characters. Every character must have arcs.
+Principle: no character is "skipped" — every character needs full arcs for EP rendering.
 Doesn't need arc: scope="support" → handled in D phase per-EP.
-Detection signals (any 1 triggers arc): identity change, status change, age change, major event, environment change.`;
+Phase-split signals: identity change, status change, age change, major event, environment change.`;
 
 const IMPORT_ARC_PHASE_EN = `=== Phase splitting rules ===
 2-7 phases per character. Phase name with EP range. New phase triggered by: identity/status change, age jump, major event altering appearance, time skip.
@@ -1162,8 +1163,7 @@ visualChanges are "overlay" over default appearance — only write what changed.
 const IMPORT_ARC_OUTPUT_EN = `=== Output format ===
 JSON only:
 {
-  "characterArcs": [{ "characterName": "...", "totalPhases": 4, "phases": [...] }],
-  "skippedCharacters": [{ "characterName": "...", "reason": "..." }]
+  "characterArcs": [{ "characterName": "...", "totalPhases": 4, "phases": [...] }]
 }`;
 
 const IMPORT_ARC_LANG_EN = `[Language rule] All field values must use the same language as the source text. English source → English output.`;

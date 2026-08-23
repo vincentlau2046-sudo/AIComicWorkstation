@@ -90,6 +90,7 @@ export function CharactersInlinePanel({
           action: "single_character_image",
           payload: { characterId },
           modelConfig: { ...getModelConfig(), image: resolveImageRef(imageModelRef) },
+          language: locale,
         }),
       });
       onUpdate();

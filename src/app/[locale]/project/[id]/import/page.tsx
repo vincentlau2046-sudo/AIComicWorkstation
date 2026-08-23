@@ -127,10 +127,10 @@ export default function ImportPage({
           setCurrentStep(maxDone);
           for (let s = 1; s <= 6; s++) {
             const stepLogs = data.filter((l: LogEntry) => l.step === s);
-            if (stepLogs.some((l: LogEntry) => l.status === "error")) {
-              setStepStatus((prev) => ({ ...prev, [s]: "error" }));
-            } else if (stepLogs.some((l: LogEntry) => l.status === "done")) {
-              setStepStatus((prev) => ({ ...prev, [s]: "done" }));
+            // 取该步骤最后一条日志的状态（成功重试后 error 被 done 覆盖）
+            const lastLog = stepLogs[stepLogs.length - 1] as LogEntry | undefined;
+            if (lastLog) {
+              setStepStatus((prev) => ({ ...prev, [s]: lastLog.status as "running" | "done" | "error" }));
             }
           }
 
@@ -491,7 +491,7 @@ export default function ImportPage({
     await runArc();
   }
 
-  // ── Step 5: Character arcs (triggered by user after reviewing episodes) ──
+    // ── Step 5: Character arcs (triggered by user after reviewing episodes) ──
   async function runArc() {
     if (!textGuard()) return;
     if (pipelineActive) { toast.warning("正在处理中，请等待完成"); return; }
@@ -542,10 +542,10 @@ export default function ImportPage({
     markDownstreamStale(5);
   }
 
-  // ── Step 5 → proceed to generate (clear old data first, then regenerate) ──
-  async function proceedToGenerate() {
+  // ── Step 5 → 进入 Step 6：展示数据总览，由用户确认后再写入 ──
+  function proceedToGenerate() {
+    setCurrentStep(6);
     setStepStatus((prev) => ({ ...prev, 6: "running" }));
-    await runGenerate(true);
   }
 
   // ── Step 6: Generate episodes + characters (with optional regenerate) ──
@@ -965,6 +965,39 @@ export default function ImportPage({
                 </div>
               ))}
             </div>
+
+            {/* Character relationships */}
+            {relationships.length > 0 && (
+              <div className="mt-6 space-y-3">
+                <h4 className="text-sm font-semibold text-[--text-secondary]">
+                  {t("characterRelations") || "角色关系"} ({relationships.length})
+                </h4>
+                <div className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-2">
+                  {relationships.map((rel, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center gap-2 rounded-xl border border-[--border-subtle] bg-white/60 p-3 text-sm"
+                    >
+                      <span className="font-medium text-[--text-primary]">{rel.characterA}</span>
+                      <span className="text-xs text-[--text-muted]">
+                        {rel.relationType === "ally" ? "盟友" :
+                         rel.relationType === "enemy" ? "敌对" :
+                         rel.relationType === "lover" ? "恋人" :
+                         rel.relationType === "family" ? "亲属" :
+                         rel.relationType === "mentor" ? "师徒" :
+                         rel.relationType === "rival" ? "对手" :
+                         rel.relationType === "stranger" ? "陌路" :
+                         rel.relationType === "neutral" ? "中立" : rel.relationType}
+                      </span>
+                      <span className="font-medium text-[--text-primary]">{rel.characterB}</span>
+                      {rel.description && (
+                        <span className="ml-1 text-xs text-[--text-muted]">— {rel.description}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         );
 
@@ -1146,56 +1179,108 @@ export default function ImportPage({
         );
 
       // ── Step 6: import complete ──
-      case 6:
-        return (
-          <div className="mx-auto mt-16 flex max-w-md flex-col items-center gap-4 rounded-2xl border border-emerald-200 bg-emerald-50/50 p-8 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100">
-              <Check className="h-6 w-6 text-emerald-600" />
-            </div>
-            <div>
-              <h3 className="font-display text-lg font-bold text-[--text-primary]">
-                {t("importComplete") || "导入完成"}
-              </h3>
-              <p className="mt-1 text-sm text-[--text-muted]">
-                {t("importCompleteHint") || "分集和角色已自动创建，可以开始制作漫画了。"}
-              </p>
-            </div>
-            <div className="flex gap-2">
+      case 6: {
+        const mainCount = characters.filter((c) => c.scope === "main").length;
+        const guestCount = characters.length - mainCount;
+        const totalPhases = characterArcs.reduce(
+          (sum: number, a) => sum + (a.phases?.length || 0),
+          0
+        );
+
+        if (stepStatus[6] === "done") {
+          // 已写入 → "导入完成" 屏幕
+          return (
+            <div className="mx-auto mt-16 flex max-w-md flex-col items-center gap-4 rounded-2xl border border-emerald-200 bg-emerald-50/50 p-8 text-center">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-100">
+                <Check className="h-6 w-6 text-emerald-600" />
+              </div>
+              <div>
+                <h3 className="font-display text-lg font-bold text-[--text-primary]">
+                  {t("importComplete") || "导入完成"}
+                </h3>
+                <p className="mt-1 text-sm text-[--text-muted]">
+                  {t("importCompleteHint") || "分集和角色已写入，可以开始制作漫画了。"}
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  onClick={() => router.push(`/${locale}/project/${projectId}/episodes`)}
+                  className="rounded-xl"
+                >
+                  {t("goToProject") || "进入项目"}
+                  <ArrowRight className="ml-1.5 h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                    if (!textGuard()) return;
+                    setStepStatus((prev) => ({ ...prev, 6: "running" }));
+                    setPipelineActive(true);
+                    await runGenerate(true);
+                    setPipelineActive(false);
+                  }}
+                  className="rounded-xl"
+                >
+                  <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                  重新生成
+                </Button>
+              </div>
               <Button
-                onClick={() => router.push(`/${locale}/project/${projectId}/episodes`)}
-                className="rounded-xl"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setHistoryMode(false);
+                  setSelectedStep(null);
+                  resetPipeline();
+                }}
               >
-                {t("goToProject") || "进入项目"}
-                <ArrowRight className="ml-1.5 h-4 w-4" />
+                {t("newImport") || "开始新导入"}
               </Button>
+            </div>
+          );
+        }
+
+        // 未写入：数据总览 + "确认写入"
+        const stats = [
+          { label: "分集", value: String(episodes.length) },
+          { label: "角色", value: `${characters.length}（主 ${mainCount} / 配 ${guestCount}）` },
+          { label: "关系", value: String(relationships.length) },
+          { label: "视觉阶段", value: String(totalPhases) },
+        ];
+        return (
+          <div className="mx-auto mt-8 max-w-lg space-y-4">
+            <h3 className="font-display text-lg font-bold text-[--text-primary]">导入数据总览</h3>
+            <p className="text-sm text-[--text-muted]">
+              重新导入为「只追加、不清理」：确认后将写入数据库；多出的角色卡可在「角色管理」中手动删减。
+            </p>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {stats.map((s) => (
+                <div key={s.label} className="rounded-xl border border-[--border-subtle] bg-white p-3 text-center">
+                  <div className="text-xl font-bold text-[--text-primary]">{s.value}</div>
+                  <div className="mt-1 text-xs text-[--text-muted]">{s.label}</div>
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center gap-3">
               <Button
-                variant="outline"
                 onClick={async () => {
                   if (!textGuard()) return;
-                  setStepStatus((prev) => ({ ...prev, 6: "running" }));
                   setPipelineActive(true);
+                  setStepStatus((prev) => ({ ...prev, 6: "running" }));
                   await runGenerate(true);
                   setPipelineActive(false);
                 }}
+                disabled={pipelineActive}
                 className="rounded-xl"
               >
-                <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
-                重新生成
+                <Check className="mr-1.5 h-3.5 w-3.5" />
+                确认写入
               </Button>
+              {pipelineActive && <span className="text-xs text-[--text-muted]">正在写入...</span>}
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setHistoryMode(false);
-                setSelectedStep(null);
-                resetPipeline();
-              }}
-            >
-              {t("newImport") || "开始新导入"}
-            </Button>
           </div>
         );
+      }
 
       default:
         return null;
@@ -1272,7 +1357,7 @@ export default function ImportPage({
         {loadingHistory ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-4">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="text-sm text-[--text-muted]">{t("loadingHistory") || "加载导入记录..."}</p>
+            <p className="text-sm text-[--text-muted]">加载导入记录...</p>
           </div>
         ) : (
           renderStepContent()

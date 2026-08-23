@@ -10,7 +10,7 @@ import { getUserIdFromRequest } from '@/lib/get-user-id'
 import { addImportLog, chunkText, CHUNK_SIZE } from '@/lib/import-utils'
 import { resolvePrompt } from '@/lib/ai/prompts/resolver'
 
-export const maxDuration = 300;
+export const maxDuration = 1200;
 
 interface SplitEpisode {
   title: string;
@@ -112,7 +112,7 @@ export async function POST(
 
   const model = createLanguageModel(body.modelConfig.text)
   const scriptSplitSystem = await resolvePrompt('import_split', { userId, projectId, language: lang })
-  const retryStrategy = new RetryStrategy({ maxRetries: 2, baseDelay: 1000, jitter: true })
+  const retryStrategy = new RetryStrategy({ maxRetries: 4, baseDelay: 3000, maxDelay: 60000, jitter: true })
 
   // Build character context
   const allNames = body.allCharacters.map((c) => c.name)

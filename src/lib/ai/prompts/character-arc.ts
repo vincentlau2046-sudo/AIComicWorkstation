@@ -1,28 +1,23 @@
 /**
  * Character Arc prompt — Step 5 of the import pipeline.
- * For main characters that undergo significant visual transformation
- * across the story, designs key phase nodes (e.g. 少年书生 → 金榜题名 → 狱中蜕变).
- * Phases span multiple episodes; D phase maps episode.sequence to episodeRange.
+ * For every character, designs the complete set of visual states
+ * across the story timeline.
  *
  * Registry key: "character_arc"  (category: "import")
  */
 export const CHARACTER_ARC_SYSTEM = `你是一位资深的角色设计师和剧本分析专家，擅长从长篇叙事中识别角色的阶段性转变，并为每个阶段设计精确的视觉外观。
 
-你的任务：阅读角色列表和分集概要，识别哪些角色在故事中经历了显著的跨集变化，为每个有变化的角色设计"角色弧光"——即该角色在故事时间线上的关键状态节点。`;
+你的任务：为**每一个角色**设计完整的弧光序列——即该角色从出场到落幕的所有关键视觉状态节点。
+弧光序列是 EP 视频唯一引用的角色视觉参考，因此必须包含角色的完整阶段，不能遗漏任何时期。`;
 
-export const CHARACTER_ARC_DETECTION = `═══════ 判定哪些角色需要弧光设计 ═══════
+export const CHARACTER_ARC_DETECTION = `═══════ 弧光设计规则 ═══════
 
-需要弧光的角色（同时满足）:
-- scope = "main" (主角)
-- 角色在故事中经历明显的身份/地位/年龄/外貌变化
-- 这种变化跨越多个 EP，不是单集内的临时换装
+每个角色都需要弧光。主角和配角全部需要弧光。
 
-不需要弧光的角色:
-- scope = "guest" → 归 D 阶段按 EP 处理
-- 角色虽为主角但整个故事中外貌完全不变 → 只需默认阶段，不需要弧光
-- 变化仅限于"情绪"或"内心"而无外观改变 → 不需要
+主角（scope=main）: 典型 2-7 个阶段，覆盖身份/地位/年龄/外貌的显著跨集变化
+配角（scope=guest）: 典型 2 个阶段（出场状态 + 转变状态）；如果配角对剧情推动显著可进一步增加
 
-判别信号（出现 1 个就应设计弧光）:
+阶段拆分信号（用于判断角色应拆为几个阶段）:
 - 身份变化: 书生→举人→官员 / 平民→战士→将军 / 学徒→大师
 - 地位变化: 升迁/失势/入狱/流放/隐居
 - 年龄变化: 少年→青年→中年→老年
@@ -33,14 +28,13 @@ export const CHARACTER_ARC_PHASE_RULES = `═══════ 阶段拆分规�
 
 每个阶段 = 角色在某个时间段的稳定视觉状态。
 
-阶段数量: 2-7 个
-- 过少（1个）= 过于粗糙，丢失了角色的成长弧线
-- 过多（>7个）= 过度拆分，把每次换衣服都当阶段
+阶段数量由角色的实际转变决定：
+- 主角（main）: 典型 2-7 个
+- 配角（guest）: 典型 2 个。第 1 阶段是默认出场状态（覆盖出场集数），第 2 阶段体现角色的转变；如果对剧情推动更显著可增加
 
-阶段命名: "阶段名 (EP范围)"
+阶段命名: "阶段名"（不要包含 EP 范围）
 - 阶段名应概括这个时期的核心状态
-- EP范围从分集概要中推断
-- 示例: "少年书生 (EP1-2)" / "金榜题名 (EP6-8)" / "狱中蜕变 (EP13-15)"
+- 示例: "少年书生" / "金榜题名" / "狱中蜕变" / "敬畏军纪的士兵"
 
 触发新阶段的信号:
 - 身份/地位变化 → 新阶段开始
@@ -52,7 +46,11 @@ export const CHARACTER_ARC_PHASE_RULES = `═══════ 阶段拆分规�
 
 {
   "phaseName": "少年书生",
-  "episodeRange": "EP1-2",
+  "description": "家境贫寒的农家少年，每日在村私塾苦读，衣衫虽破旧但干净整洁",
+  "visualHint": "清秀少年，粗布青衣，束发木簪",
+  "episodeStart": 1,
+  "episodeEnd": 2,
+  "episodeRange": "1,2,4",
   "triggerEvent": "家境贫寒，在村私塾苦读，尚未参加科举",
   "visualChanges": {
     "clothing": "青色粗布长衫，洗得发白，袖口磨出毛边，腰间系麻绳",
@@ -67,9 +65,8 @@ export const CHARACTER_ARC_PHASE_RULES = `═══════ 阶段拆分规�
 
 ═══════ 视觉变化写作规则 ═══════
 
-1. visualChanges 与该角色的默认外观（来自角色提取）是"覆盖"关系
-   - 只写该阶段相对于默认外观的变化
-   - 不变的部分不写
+1. visualChanges 只写该阶段相对于 template 默认外观的变化，不变的部分不写
+   下游 R2I 流程会自动合并 template 锚点 + 本阶段变化，不需要在此重复模板内容
 
 2. 与项目风格（visualStyle）保持一致:
    - 写实风 → 具体材质、磨损、年代感
@@ -90,13 +87,16 @@ export const CHARACTER_ARC_OUTPUT = `═══════ 输出格式 ══�
 {
   "characterArcs": [
     {
-      "characterName": "角色名（与输入的角色列表精确一致）",
+      "characterName": "角色名（必须来自角色列表，精确一致，不要创造新角色）",
       "totalPhases": 4,
       "phases": [
         {
           "phaseName": "贫苦农民",
+          "description": "家境贫寒的农家少年，衣衫破旧但干净，每日在村私塾苦读",
+          "visualHint": "清秀少年，粗布青衣，束发木簪",
           "episodeStart": 1,
           "episodeEnd": 2,
+          "episodeRange": "1,2,4",
           "triggerEvent": "家境贫寒, 在村私塾苦读",
           "visualChanges": {
             "clothing": "粗布短褐, 草鞋沾泥",
@@ -106,32 +106,12 @@ export const CHARACTER_ARC_OUTPUT = `═══════ 输出格式 ══�
             "accessories": "肩挎旧书箱",
             "expression": "眼神清澈好奇, 略带不安"
           },
-          "t2iStructure": {
-            "age": "16-18岁, 面容清秀略带稚气, 未历风霜",
-            "subject": "男, 身高175cm, 精瘦, 微含胸",
-            "body": "清瘦体型, 肩宽约40cm, 站姿挺拔但习惯性微收下颌",
-            "face": "清秀少年面庞, 杏仁眼明亮清澈, 鼻梁挺直, 薄唇, 肤色白皙",
-            "hair": "黑色长发束于顶, 木簪固定, 几缕碎发垂落额前",
-            "clothing": "青色粗布短褐, 袖口磨出毛边, 腰间系麻绳, 草鞋沾泥",
-            "lighting": "柔和的自然光, 从画面左上方45度照入, 暖色温"
-          },
           "statusChange": "寒门学子, 尚未有功名"
         }
       ]
     }
-  ],
-  "skippedCharacters": [
-    { "characterName": "角色名", "reason": "外观无变化 / scope=guest / 其他原因" }
   ]
-}
-
-═══ t2iStructure 字段说明 ═══
-t2iStructure 是该阶段角色的 T2I 图像生成提示词, 直接传给 Qwen Image 2512。
-- 7 个字段必须全部填写, 值用中文
-- age/subject/body/face/hair/clothing/lighting
-- 基准外观来自角色提取阶段的 description, 此处的 t2iStructure 只覆盖阶段变化部分
-- 例如基准描述"方正国字脸, 丹凤眼"在 faceAge 为"16-18岁"时需要调整为"清秀少年面庞"
-- t2iStructure 和 visualChanges 必须一致, 不能互相矛盾`;
+}`;
 
 export const CHARACTER_ARC_LANGUAGE = `【关键语言规则】
 所有字段值必须使用与原文相同的语言。
@@ -155,6 +135,9 @@ export function buildCharacterArcPrompt(
 
   return `分析以下角色的故事弧线，输出完整的 characterArcs JSON。
 
+**重要：只**为下方"角色列表"中列出的角色设计弧光。不要为列表之外的角色创建弧光。
+分集概要中可能提到其他角色，但请忽略它们——只为角色列表中的角色输出弧光。
+
 ═══════ 项目风格 ═══════
 视觉风格: ${styleContext.visualStyle}
 时代美学: ${styleContext.eraAesthetic}
@@ -162,6 +145,6 @@ export function buildCharacterArcPrompt(
 ═══════ 分集概要 ═══════
 ${epList}
 
-═══════ 角色列表 ═══════
+═══════ 角色列表（只为此列表中的角色生成弧光） ═══════
 ${charList}`;
 }

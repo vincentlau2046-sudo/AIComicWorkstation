@@ -12,7 +12,7 @@ import { buildProjectAssessPrompt } from "@/lib/ai/prompts/project-assess";
 import { matchVisualStyleKey } from "@/lib/ai/prompts/style-registry";
 import { resolvePrompt } from "@/lib/ai/prompts/resolver";
 
-export const maxDuration = 120;
+export const maxDuration = 1200;
 
 export async function POST(
   request: Request,

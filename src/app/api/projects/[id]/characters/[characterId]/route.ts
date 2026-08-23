@@ -27,6 +27,7 @@ export async function PATCH(
     description: string;
     visualHint: string;
     t2iStructure: string | null;
+    r2iStructure: string | null;
     scope: string;
     episodeId: string | null;
     referenceImage: string;
@@ -41,6 +42,7 @@ export async function PATCH(
   if (body.t2iStructure !== undefined) (updateData as any).t2iStructure = body.t2iStructure;
   if (body.referenceImage !== undefined) updateData.referenceImage = body.referenceImage;
   if (body.episodeSequences !== undefined) updateData.episodeSequences = body.episodeSequences;
+  if (body.r2iStructure !== undefined) updateData.r2iStructure = body.r2iStructure;
 
   // Promote to Phase: when phaseName has a non-empty value
   if (body.phaseName !== undefined && body.phaseName !== null && body.phaseName !== "") {

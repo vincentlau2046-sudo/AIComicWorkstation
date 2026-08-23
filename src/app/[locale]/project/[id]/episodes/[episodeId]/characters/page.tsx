@@ -6,7 +6,7 @@ import { useModelStore } from "@/stores/model-store";
 import { CharacterCard } from "@/components/editor/character-card";
 import { CharacterRelations } from "@/components/editor/character-relations";
 import { Button } from "@/components/ui/button";
-import { useTranslations } from "next-intl";
+import { useTranslations, useLocale } from "next-intl";
 import { Users, Sparkles, ImageIcon, Loader2 } from "lucide-react";
 import { InlineModelPicker } from "@/components/editor/model-selector";
 import { apiFetch } from "@/lib/api-fetch";
@@ -17,6 +17,7 @@ import { toast } from "sonner";
 
 export default function EpisodeCharactersPage() {
   const t = useTranslations();
+  const locale = useLocale();
   const { project, fetchProject } = useProjectStore();
   const getModelConfig = useModelStore((s) => s.getModelConfig);
   const [extracting, setExtracting] = useState(false);
@@ -50,6 +51,7 @@ export default function EpisodeCharactersPage() {
           action: "character_extract",
           modelConfig: getModelConfig(),
           episodeId: useProjectStore.getState().currentEpisodeId,
+          language: locale,
         }),
       });
 
@@ -80,6 +82,7 @@ export default function EpisodeCharactersPage() {
           action: "batch_character_image",
           modelConfig: getModelConfig(),
           episodeId: useProjectStore.getState().currentEpisodeId,
+          language: locale,
         }),
       });
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo, useCallback, use } from "react";
 import { useTranslations, useLocale } from "next-intl";
+import { Button } from "@/components/ui/button";
 import { ArrowLeft, Loader2, Sparkles } from "lucide-react";
 import { apiFetch } from "@/lib/api-fetch";
 import { CharacterCard } from "@/components/editor/character-card";
@@ -27,6 +28,7 @@ interface Character {
   episodeSequences: string | null;
   visualChanges: string | null;
   t2iStructure: string | null;
+  r2iStructure: string | null;
   createdAt: number;
 }
 
@@ -161,6 +163,61 @@ export default function CharactersPage({
     fetchData();
   }
 
+
+  const [reextracting, setReextracting] = useState(false);
+  const [enriching, setEnriching] = useState(false);
+  const [batchGenerating, setBatchGenerating] = useState(false);
+
+  async function handleReextract() {
+    if (!textGuard()) return;
+    setReextracting(true);
+    try {
+      await apiFetch(`/api/projects/${projectId}/characters/reextract`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modelConfig: getModelConfig(), language: locale }),
+      });
+      toast.success("角色定义更新完成");
+    } catch {
+      toast.error("角色定义更新失败");
+    }
+    setReextracting(false);
+    fetchData();
+  }
+
+  async function handleEnrichPhases() {
+    if (!textGuard()) return;
+    setEnriching(true);
+    try {
+      await apiFetch(`/api/projects/${projectId}/characters/enrich-phases`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modelConfig: getModelConfig() }),
+      });
+      toast.success("角色视觉更新完成");
+    } catch {
+      toast.error("角色视觉更新失败");
+    }
+    setEnriching(false);
+    fetchData();
+  }
+
+  async function handleBatchGen(type: string) {
+    if (!textGuard()) return;
+    setBatchGenerating(true);
+    try {
+      await apiFetch(`/api/projects/${projectId}/characters/batch-generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type, modelConfig: getModelConfig(), language: locale }),
+      });
+      toast.success("批量生成完成");
+    } catch {
+      toast.error("批量生成失败");
+    }
+    setBatchGenerating(false);
+  }
+
   if (loading) {
     return (
       <div className="flex min-h-[400px] items-center justify-center">
@@ -193,18 +250,6 @@ export default function CharactersPage({
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            onClick={handleExtract}
-            disabled={extracting}
-            className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-primary/90 disabled:opacity-60"
-          >
-            {extracting ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Sparkles className="h-3.5 w-3.5" />
-            )}
-            {extracting ? "提取中..." : "提取全部角色"}
-          </button>
           <InlineModelPicker capability="text" />
         </div>
       </div>
@@ -230,13 +275,27 @@ export default function CharactersPage({
       {activeTab === "template" && (
         <>
           <section className="mb-8">
-            <div className="mb-4 flex items-center gap-2">
-              <h3 className="font-display text-lg font-semibold text-[--text-primary]">
-                {tChar("mainSection")}
-              </h3>
-              <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-100 px-1.5 text-[11px] font-semibold text-blue-700">
-                {templateChars.length}
-              </span>
+            <div className="mb-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <h3 className="font-display text-lg font-semibold text-[--text-primary]">
+                  {tChar("mainSection")}
+                </h3>
+                <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-blue-100 px-1.5 text-[11px] font-semibold text-blue-700">
+                  {templateChars.length}
+                </span>
+              </div>
+              <div className="flex gap-2">
+                <Button onClick={handleReextract} disabled={reextracting} className="rounded-lg text-xs h-8">
+                  {reextracting ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
+                  更新角色定义
+                </Button>
+                <Button onClick={() => handleBatchGen("t2i_prompt")} disabled={batchGenerating} className="rounded-lg text-xs h-8">
+                  提示词批量生成
+                </Button>
+                <Button onClick={() => handleBatchGen("t2i_image")} disabled={batchGenerating} className="rounded-lg text-xs h-8">
+                  参考图批量生成
+                </Button>
+              </div>
             </div>
             {templateChars.length === 0 ? (
               <div className="flex min-h-[120px] items-center justify-center rounded-2xl border border-dashed border-[--border-subtle] bg-white/50 p-6">
@@ -285,13 +344,27 @@ export default function CharactersPage({
       {/* Phase Characters (视觉阶段) */}
       {activeTab === "phase" && (
         <section className="mb-8">
-          <div className="mb-4 flex items-center gap-2">
-            <h3 className="font-display text-lg font-semibold text-[--text-primary]">
-              视觉阶段
-            </h3>
-            <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-indigo-100 px-1.5 text-[11px] font-semibold text-indigo-700">
-              {phaseChars.length}
-            </span>
+          <div className="mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <h3 className="font-display text-lg font-semibold text-[--text-primary]">
+                视觉阶段
+              </h3>
+              <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-indigo-100 px-1.5 text-[11px] font-semibold text-indigo-700">
+                {phaseChars.length}
+              </span>
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={handleEnrichPhases} disabled={enriching} className="rounded-lg text-xs h-8">
+                {enriching ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : null}
+                更新角色视觉
+              </Button>
+              <Button onClick={() => handleBatchGen("r2i_prompt")} disabled={batchGenerating} className="rounded-lg text-xs h-8">
+                提示词批量生成
+              </Button>
+              <Button onClick={() => handleBatchGen("r2i_image")} disabled={batchGenerating} className="rounded-lg text-xs h-8">
+                参考图批量生成
+              </Button>
+            </div>
           </div>
           {phaseChars.length === 0 ? (
             <div className="flex min-h-[120px] items-center justify-center rounded-2xl border border-dashed border-[--border-subtle] bg-white/50 p-6">
@@ -315,6 +388,7 @@ export default function CharactersPage({
                         description={char.description}
                         visualHint={char.visualHint}
                         t2iStructure={char.t2iStructure}
+                        r2iStructure={char.r2iStructure}
                         referenceImage={char.referenceImage}
                         referenceImageHistory={char.referenceImageHistory}
                         scope={char.scope}

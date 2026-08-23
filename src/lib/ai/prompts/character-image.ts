@@ -10,6 +10,15 @@ const FRONT_VIEW_TEMPLATE = {
   quality_tag:     `[quality: sharp focus, high detail, character reference sheet]`,
 } as const;
 
+/** 中文版模板：语言选择为 zh 时使用，T2I structure 输出中文。 */
+const FRONT_VIEW_TEMPLATE_ZH = {
+  subject_tag:     `[角色设定图] [正面视图] [全身] [站立姿势]`,
+  composition:     `[构图: 纵向肖像，全身从头顶到脚底，头部靠近顶部，双脚靠近底部]`,
+  pose_constraint: `[姿势: 自然站立，双臂垂于身体两侧，双脚与肩同宽，表情自然]`,
+  environment:     `[环境: 纯白背景，无阴影]`,
+  quality_tag:     `[画质: 清晰对焦，高细节，角色参考图]`,
+} as const;
+
 /**
  * 构建 ComfyUI gen_front 步骤用的正面图 T2I prompt。
  * t2iStructure 优先（结构化标签 → Qwen 2512 精度 +30%），
@@ -17,35 +26,50 @@ const FRONT_VIEW_TEMPLATE = {
  */
 export function buildCharacterFrontViewPrompt(
   t2iStructure: string | null,
-  description: string
+  description: string,
+  language?: "zh" | "en"
 ): string {
+  // 根据语言选择挑选模板与标签：zh → 中文，en/未指定 → 英文
+  const tpl = language === "zh" ? FRONT_VIEW_TEMPLATE_ZH : FRONT_VIEW_TEMPLATE;
+  const zh = language === "zh";
+  const L = {
+    age:      zh ? "[年龄]" : "[age]",
+    subject:   zh ? "[主体]" : "[subject]",
+    body:      zh ? "[体型]" : "[body]",
+    face:      zh ? "[面部]" : "[face]",
+    hair:      zh ? "[发型]" : "[hair]",
+    clothing:  zh ? "[服装]" : "[clothing]",
+    lighting:   zh ? "[光照]" : "[lighting]",
+    colorOpen: zh ? "[色彩调色板:" : "[color palette:",
+  };
+
   if (t2iStructure) {
     // 主路径：结构化标签前置，散文兜底
     try {
       const s = JSON.parse(t2iStructure) as Record<string, string>;
       const colorTag = description.match(/色彩调色板[：:]\s*(.+?)(?:[。\n]|$)/);
       return [
-        FRONT_VIEW_TEMPLATE.subject_tag,
+        tpl.subject_tag,
         "",
-        FRONT_VIEW_TEMPLATE.composition,
+        tpl.composition,
         "",
-        FRONT_VIEW_TEMPLATE.pose_constraint,
+        tpl.pose_constraint,
         "",
-        FRONT_VIEW_TEMPLATE.environment,
+        tpl.environment,
         "",
-        s.age ? `[age] ${s.age}` : "",
-        s.subject ? `[subject] ${s.subject}` : "",
-        s.body ? `[body] ${s.body}` : "",
-        s.face ? `[face] ${s.face}` : "",
-        s.hair ? `[hair] ${s.hair}` : "",
-        s.clothing ? `[clothing] ${s.clothing}` : "",
-        s.lighting ? `[lighting] ${s.lighting}` : "",
+        s.age ? `${L.age} ${s.age}` : "",
+        s.subject ? `${L.subject} ${s.subject}` : "",
+        s.body ? `${L.body} ${s.body}` : "",
+        s.face ? `${L.face} ${s.face}` : "",
+        s.hair ? `${L.hair} ${s.hair}` : "",
+        s.clothing ? `${L.clothing} ${s.clothing}` : "",
+        s.lighting ? `${L.lighting} ${s.lighting}` : "",
         "",
         description,
         "",
-        colorTag ? `[color palette: ${colorTag[1]}]` : "",
+        colorTag ? `${L.colorOpen} ${colorTag[1]}]` : "",
         "",
-        FRONT_VIEW_TEMPLATE.quality_tag,
+        tpl.quality_tag,
       ].filter(Boolean).join("\n");
     } catch {
       // JSON parse failed — fall through to prose path
@@ -54,17 +78,17 @@ export function buildCharacterFrontViewPrompt(
   }
   // Fallback: 散文路径（已有角色或 t2iStructure 解析失败）
   return [
-    FRONT_VIEW_TEMPLATE.subject_tag,
+    tpl.subject_tag,
     "",
-    FRONT_VIEW_TEMPLATE.composition,
+    tpl.composition,
     "",
-    FRONT_VIEW_TEMPLATE.pose_constraint,
+    tpl.pose_constraint,
     "",
-    FRONT_VIEW_TEMPLATE.environment,
+    tpl.environment,
     "",
     description,
     "",
-    FRONT_VIEW_TEMPLATE.quality_tag,
+    tpl.quality_tag,
   ].join("\n");
 }
 

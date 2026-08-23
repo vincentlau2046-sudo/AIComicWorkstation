@@ -10,7 +10,7 @@ import { getUserIdFromRequest } from "@/lib/get-user-id";
 import { addImportLog } from "@/lib/import-utils";
 import { resolvePrompt } from "@/lib/ai/prompts/resolver";
 
-export const maxDuration = 300;
+export const maxDuration = 1200;
 
 interface ExtractedChar {
   name: string;

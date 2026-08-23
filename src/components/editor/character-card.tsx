@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { useTranslations } from "next-intl";
+import { useTranslations, useLocale } from "next-intl";
 import { uploadUrl } from "@/lib/utils/upload-url";
 import { useModelStore, type ModelRef } from "@/stores/model-store";
 import { Sparkles, Loader2, Copy, Check, ArrowUpCircle, Trash2, ChevronLeft, ChevronRight, Upload } from "lucide-react";
@@ -22,6 +22,7 @@ interface CharacterCardProps {
   description: string;
   visualHint: string | null;
   t2iStructure?: string | null;
+  r2iStructure?: string | null;
   referenceImage: string | null;
   referenceImageHistory?: string | null;
   onUpdate: () => void;
@@ -44,6 +45,7 @@ export function CharacterCard({
   description,
   visualHint,
   t2iStructure,
+  r2iStructure,
   referenceImage,
   referenceImageHistory,
   onUpdate,
@@ -59,6 +61,7 @@ export function CharacterCard({
   createdAt,
 }: CharacterCardProps) {
   const t = useTranslations();
+  const locale = useLocale();
   const getModelConfig = useModelStore((s) => s.getModelConfig);
   const providers = useModelStore((s) => s.providers);
   const defaultImageModel = useModelStore((s) => s.defaultImageModel);
@@ -67,13 +70,16 @@ export function CharacterCard({
   const [editDesc, setEditDesc] = useState(description);
   const [editVisualHint, setEditVisualHint] = useState(visualHint ?? "");
   const [editT2iStructure, setEditT2iStructure] = useState(t2iStructure ?? "");
+  const [editR2iStructure, setEditR2iStructure] = useState(r2iStructure ?? "");
 
   // Sync local state when props change (e.g. after re-extraction)
   useEffect(() => { setEditName(name); }, [name]);
   useEffect(() => { setEditDesc(description); }, [description]);
   useEffect(() => { setEditVisualHint(visualHint ?? ""); }, [visualHint]);
   useEffect(() => { setEditT2iStructure(t2iStructure ?? ""); }, [t2iStructure]);
+  useEffect(() => { setEditR2iStructure(r2iStructure ?? ""); }, [r2iStructure]);
   const [generating, setGenerating] = useState(false);
+  const [generatingR2i, setGeneratingR2i] = useState(false);
   const [lightbox, setLightbox] = useState(false);
   const [copied, setCopied] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -104,7 +110,7 @@ export function CharacterCard({
     await apiFetch(`/api/projects/${projectId}/characters/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: editName, description: editDesc, visualHint: editVisualHint, t2iStructure: editT2iStructure }),
+      body: JSON.stringify({ name: editName, description: editDesc, visualHint: editVisualHint, t2iStructure: editT2iStructure, r2iStructure: editR2iStructure }),
     });
     onUpdate();
   }
@@ -120,6 +126,7 @@ export function CharacterCard({
           action: "single_character_image",
           payload: { characterId: id },
           modelConfig: { ...getModelConfig(), image: resolveImageRef(imageModelRef) },
+          language: locale,
         }),
       });
       await response.json();
@@ -129,6 +136,30 @@ export function CharacterCard({
     }
     setGenerating(false);
     onUpdate();
+  }
+
+  async function handleGenerateR2iPrompt() {
+    setGeneratingR2i(true);
+    try {
+      const res = await apiFetch(`/api/projects/${projectId}/characters/${id}/r2i-prompt`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (data.prompt) {
+        setEditR2iStructure(data.prompt);
+        // Auto-save to DB
+        await apiFetch(`/api/projects/${projectId}/characters/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ r2iStructure: data.prompt }),
+        });
+        onUpdate();
+      }
+    } catch (err) {
+      console.error("R2I prompt error:", err);
+      toast.error("生成 R2I Prompt 失败");
+    }
+    setGeneratingR2i(false);
   }
 
   async function handleUploadImage(e: React.ChangeEvent<HTMLInputElement>) {
@@ -288,22 +319,54 @@ export function CharacterCard({
           placeholder={t("character.visualHint")}
           className="h-8 text-xs text-muted-foreground"
         />
-        <details className="text-xs">
-          <summary className="cursor-pointer text-muted-foreground hover:text-foreground">T2I Structure (Qwen structured prompt)</summary>
-          <Textarea
-            value={editT2iStructure}
-            onChange={(e) => setEditT2iStructure(e.target.value)}
-            onBlur={handleSave}
-            placeholder='[age] 71-year-old, frail
+        {!phaseName && (
+          <details className="text-xs">
+            <summary className="cursor-pointer text-muted-foreground hover:text-foreground">T2I Structure (Qwen structured prompt)</summary>
+            <Textarea
+              value={editT2iStructure}
+              onChange={(e) => setEditT2iStructure(e.target.value)}
+              onBlur={handleSave}
+              placeholder='[age] 71-year-old, frail
 [subject] male, 162cm, thin, hunched
 [body] narrow shoulders, loose skin, bowed back
 [face] deep wrinkles, sunken cheeks, age spots
 [hair] sparse white hair, wispy beard
 [clothing] faded dragon robe, too large, sags at shoulders
 [lighting] warm front light, soft shadows'
-            className="h-24 resize-none text-xs font-mono"
-          />
-        </details>
+              className="h-24 resize-none text-xs font-mono"
+            />
+          </details>
+        )}
+        {phaseName && (
+          <details className="text-xs">
+            <summary className="cursor-pointer text-muted-foreground hover:text-foreground">R2I Prompt (Phase reference image)</summary>
+            <div className="mt-2 space-y-2">
+              <Textarea
+                value={editR2iStructure}
+                onChange={(e) => setEditR2iStructure(e.target.value)}
+                onBlur={handleSave}
+                placeholder="点击下方按钮生成 R2I Prompt..."
+                className="h-24 resize-none text-xs font-mono"
+              />
+              {!editR2iStructure && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleGenerateR2iPrompt}
+                  disabled={generatingR2i}
+                  className="w-full text-[11px]"
+                >
+                  {generatingR2i ? (
+                    <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+                  ) : (
+                    <Sparkles className="mr-1.5 h-3 w-3" />
+                  )}
+                  生成 R2I Prompt
+                </Button>
+              )}
+            </div>
+          </details>
+        )}
         <div className="space-y-2">
             <InlineModelPicker capability="image" value={imageModelRef} onChange={setImageModelRef} />
             <div className="flex gap-2">

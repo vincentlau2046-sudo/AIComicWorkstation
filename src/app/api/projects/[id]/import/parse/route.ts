@@ -5,7 +5,7 @@ import { eq, and } from "drizzle-orm";
 import { getUserIdFromRequest } from "@/lib/get-user-id";
 import { addImportLog, extractTextFromFile } from "@/lib/import-utils";
 
-export const maxDuration = 60;
+export const maxDuration = 1200;
 
 export async function POST(
   request: Request,

@@ -11,7 +11,7 @@ import { addImportLog } from "@/lib/import-utils";
 import { buildCharacterArcPrompt } from "@/lib/ai/prompts/character-arc";
 import { resolvePrompt } from "@/lib/ai/prompts/resolver";
 
-export const maxDuration = 120;
+export const maxDuration = 1200;
 
 interface ArcPhase {
   phaseName: string;

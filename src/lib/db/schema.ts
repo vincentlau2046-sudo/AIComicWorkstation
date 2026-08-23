@@ -87,6 +87,7 @@ export const characters = sqliteTable("characters", {
   bodyType: text("body_type").default("average"),
   isStale: integer("is_stale").notNull().default(0),
   t2iStructure: text("t2i_structure"),
+  r2iStructure: text("r2i_structure"),
   phaseName: text("phase_name"),
   episodeStart: integer("episode_start"),
   episodeEnd: integer("episode_end"),
