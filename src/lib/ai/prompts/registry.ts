@@ -2193,8 +2193,19 @@ const frameGenerateFirstDef: PromptDefinition = {
       (params?.previousLastFrame as string) ?? "";
 
     const lines: string[] = [];
+    lines.push(`生成该镜头的开场帧，作为一张高质量图像。`);
+    lines.push(r("style_matching"));
+    lines.push(`=== 场景环境 ===`);
+    lines.push(sceneDescription);
+    lines.push(`=== 画面描述 ===`);
     lines.push(startFrameDesc);
-    return lines.join("\n");
+    lines.push(`=== 角色描述 ===`);
+    lines.push(characterDescriptions);
+    lines.push(r("reference_rules"));
+    if (previousLastFrame) {
+      lines.push(r("continuity_rules"));
+    }
+    lines.push(r("rendering_quality"));
     return lines.join("\n");
   },
 };
@@ -2250,8 +2261,20 @@ const frameGenerateLastDef: PromptDefinition = {
       (params?.characterDescriptions as string) ?? "";
 
     const lines: string[] = [];
+    lines.push(`生成该镜头的结束帧，作为一张高质量图像。`);
+    lines.push(r("style_matching"));
+    lines.push(`=== 场景环境 ===`);
+    lines.push(sceneDescription);
+    lines.push(`=== 画面描述 ===`);
     lines.push(endFrameDesc);
-    return lines.join("\n");
+    lines.push(`=== 角色描述 ===`);
+    lines.push(characterDescriptions);
+    lines.push(`=== 参考图 ===`);
+    lines.push(`第一张附带图像是该镜头的开场帧——以它作为你的视觉锚点。`);
+    lines.push(`其余附带图像是角色设定图（每张 4 个视角，名字印在底部）。`);
+    lines.push(r("relationship_to_first"));
+    lines.push(r("next_shot_readiness"));
+    lines.push(r("rendering_quality"));
     return lines.join("\n");
   },
 };
@@ -3015,16 +3038,24 @@ const r2vGuideDef: PromptDefinition = {
 };
 
 // ─── 14f. video_h3_t2v_guide ────────────────────────────
-// T2V Guide Layer — placeholder for future Text-to-Video mode.
+// T2V Guide Layer — for Text-to-Video (text-only) mode.
+// Was a throwing placeholder; now a resolvable key with a real slot.
+
+const T2V_GUIDE_ROLE = `你是一位 AI 视频生成导演（T2V 纯文本模式）。给定一段剧情/场景描述，请把它转写为一段简洁、连贯的视频生成提示词：突出主体、核心动作与镜头运动，输出语言与输入保持一致，不要添加输入中不存在的元素。`;
+const T2V_GUIDE_ROLE_EN = `You are an AI video-generation director (T2V text-only mode). Given a scene description, rewrite it into a concise, coherent video prompt that emphasizes the subject, core motion, and camera movement. Match the input language and do not add elements not present in the input.`;
 
 const t2vGuideDef: PromptDefinition = {
   key: "video_h3_t2v_guide",
   nameKey: "promptTemplates.prompts.videoH3T2vGuide",
   descriptionKey: "promptTemplates.prompts.videoH3T2vGuideDesc",
   category: "h3",
-  slots: [],
-  buildFullPrompt() {
-    throw new Error("T2V mode not implemented yet");
+  slots: [
+    slot("role_definition", T2V_GUIDE_ROLE, true, T2V_GUIDE_ROLE_EN),
+  ],
+  buildFullPrompt(sc) {
+    const s = this.slots;
+    const r = (k: string) => resolve(sc, s, k);
+    return [r("role_definition")].join("\n");
   },
 };
 
