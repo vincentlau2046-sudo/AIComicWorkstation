@@ -806,7 +806,7 @@ description结尾必须写光位、质感、以及光线如何强调/柔化体�
 赛博朋克风格，35mm广角镜头低角度——男，约30岁，190cm精瘦高挑身形，站立姿态，双脚与肩同宽微微前后错开，重心偏右腿，脊背微弓前倾，左手插在夹克口袋，右手自然垂在身侧。棱角分明的长脸，颧骨高耸投下锐利阴影，下颌线锋利笔直，眉骨突出。狭长上挑的丹凤眼，左眼瞳色自然灰绿、右眼为机械义眼散发幽蓝冷光，睫毛稀疏。高挺鹰钩鼻，鼻尖略下弯，鼻翼窄。薄唇苍白，唇角自然下垂。肤色病态苍白偏冷青调，质感哑光粗粝，左颊从眼角到嘴角一道细长的银色机械缝合疤痕，沿疤痕嵌有微型蓝色LED指示灯。阴郁危险的暗夜猎手气质。头发铂银白色带荧光紫挑染，右侧剃至3mm露出头皮上的电路纹身，左侧长发遮住半边脸垂至下巴，发梢参差不齐。上身破旧的哑光黑色合成皮夹克，立领，左肩焊接一块钛合金护甲片，内搭深灰色高科技速干背心，胸口印有褪色的红色骷髅标志。下身黑色工装机能裤，膝盖处缝有凯夫拉补丁，裤腿束入小腿处。脚穿磨损严重的黑色高帮军靴，鞋底加厚，鞋舌外翻。左前臂从手肘到手腕整段替换为钛合金机械义肢，关节处露出液压管线和微型齿轮，指尖是碳纤维材质。右手无名指戴一枚氧化发黑的钨钢戒指。腰后别一把折叠式等离子短刀，刀柄缠绕磨旧的红色伞绳。角色色彩调色板：哑光黑、铂银白、荧光紫、幽蓝冷光、锈红。
 
 【补充示例——极端瘦弱（重要：用于对照，不要当成内容照抄）】
-写实电影摄影，85mm镜头——女，中年，约155cm，身形极度瘦削单薄，站立姿态，双脚并拢，双臂自然垂于身侧。因消瘦而颧骨突出、太阳穴凹陷的圆脸骨架，皮肤深黄粗糙，质感如风干果实，嘴唇干裂起皮。眼神温顺略带疲惫。黑色长发用粗麻绳在脑后松垮地扎成低马尾。身穿宽大不合身的土褐色粗布长衣，因身体太瘦，布料在肩部空荡下垂，衣摆堆积大量皱褶，打满灰白色粗线补丁。双手骨节分明，手指细长如枯枝。色彩调色板：土褐、深黄、灰白。左侧逆光，色温偏冷，锐利光线强化颧骨凹陷阴影与锁骨窝深暗面，质感粗糙，颗粒感明显。
+写实电影摄影，85mm镜头——女，中年，约155cm，身形极度瘦削单薄，站立姿态，双脚并拢，双臂自然垂于身侧。因消瘦而颧骨突出、太阳穴凹陷的圆脸骨架，皮肤深黄粗糙，质感如风干果实，嘴唇干裂起皮。眼神温顺略带疲惫。黑色长发用粗麻绳在脑后松垮地扎成低马尾。身穿宽大不合身的土褐色粗布长衣，因身体太瘦，布料在肩部空荡下垂，衣摆堆积大量皱褶，打满灰白色粗线补丁。双手手背凹陷、指节处阴影浓重，手指细长如枯枝。色彩调色板：土褐、深黄、灰白。左侧逆光，色温偏冷，锐利光线强化颧骨凹陷阴影与锁骨窝深暗面，质感粗糙，颗粒感明显。
 
 【补充示例——极端肥胖】
 写实电影摄影，50mm镜头——男，老年，约160cm，身形肥硕臃肿，站立姿态，双脚分开与肩同宽，双臂因腰侧赘肉而微微外展。因脂肪填充而圆润饱满的方脸，双下巴垂至领口，法令纹被脂肪撑平，皮肤油亮暗黄。稀疏灰白短发。身穿过于紧绷的深灰色棉布马褂，胸前三颗纽扣绷紧欲裂，布料在肚腩处被撑出横向张力纹，腋下因紧绷而露出内衬。手指粗短，手背有肉窝。色彩调色板：暗黄、深灰、灰白。正面柔光，光线平铺削弱阴影，凸显体积感而非骨骼感。`;
@@ -2171,9 +2171,7 @@ ${buildStyleMappingBlock()}
 
 违反任一条 → 该帧需重新生成:
 
-1. ❌ 角色服饰/体型/发型/肤色 — 参考图已锚定全部外观，文字重复导致 T2I 信号冲突
-   禁止: "身穿深灰色粗布短褐"、"华丽锦衣"、"身材魁梧"
-   仅允许: baseName + 瞬态（姿态/表情/视线/手部位置/临时道具）
+1. ❌ 角色外观重复（服饰/体型/发型/肤色）——规则见下方【角色一致性锚定】：参考图已锚定外观，prompt 只写 baseName + 瞬态
 
 2. ❌ 括号注释 — 禁止 "(服饰不变：...)" 等注解性文字
    这类信息属于上游元数据，不应出现在图像 prompt 中
@@ -2356,9 +2354,7 @@ ${buildStyleMappingBlock()}
 [Forbidden items — any violation makes the frame a fail]
 ═══════════════════════════
 Violating any one → the frame must be regenerated:
-1. Character costume/build/hair/skin — the reference image already anchors all appearance; repeating it in text causes T2I signal conflict
-   Forbidden: "wearing a coarse-brown short robe" / "sumptuous brocade robe" / "powerful build"
-   Allowed: baseName + transient state (pose/expression/gaze/hand position/temporary prop)
+1. Character appearance duplication (costume / build / hair / skin) — see [Character-consistency anchoring] below: the reference image anchors appearance, so the prompt writes baseName + transient state only
 2. Parenthetical notes — no "(costume unchanged: ...)" annotations
 3. "feet shoulder-width" — default standing pose, no information gain (exception: special stances like a horse-stance or lunge)
 4. "high contrast" / "extreme contrast" / "soft contrast" — see the [lighting] vocabulary
