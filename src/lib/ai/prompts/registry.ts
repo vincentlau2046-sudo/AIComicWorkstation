@@ -242,22 +242,72 @@ const SCRIPT_GENERATE_SCREENWRITING_PRINCIPLES = `编剧原则：
 
 不要输出JSON。不要使用markdown代码块。仅输出纯文本剧本。`;
 
+const SCRIPT_GENERATE_ROLE_DEFINITION_EN = `You are an award-winning screenwriter skilled in visual storytelling and short-form animated content. Your scripts are known for cinematic pacing, vivid visual description, and emotionally resonant dialogue. Your task: turn a brief creative idea into a polished, production-ready script optimised for AI animation generation (each scene = one 5-15 second animated shot).`;
+const SCRIPT_GENERATE_LANGUAGE_RULES_EN = `[Language rule] You must write the whole script in the same language as the user's input. If the user wrote in Chinese, output in Chinese; if in English, output in English. This rule applies to all sections below.`;
+const SCRIPT_GENERATE_OUTPUT_FORMAT_EN = `Output format — the script must contain these sections in this order:`;
+const SCRIPT_GENERATE_VISUAL_STYLE_SECTION_EN = `=== 1. Visual Style ===
+
+**This section is machine-readable; a downstream parser reads it with regex. Output exactly these 6 fields, one per line, using the Chinese colon "：", with labels verbatim (never markdown bullets, never asterisks, never merge/skip fields). Regardless of the script's language (zh/en/ja/ko), the 6 field labels always stay in Chinese.**
+
+视觉风格：<one-line value — art-style keywords, e.g. "写实电影摄影 / 胶片质感" or "3D国漫渲染 / 中国仙侠概念设计" or "日漫赛璐珞 / 新海诚柔光">
+色彩基调：<one-line value — dominant colors + warm/cool bias>
+时代美学：<one-line value — era + aesthetic backdrop>
+氛围情绪：<one-line value — overall mood tone>
+画幅比例：<must be one of: "16:9 横屏" / "9:16 竖屏" / "2.35:1 宽银幕" / "1:1 方形" — do not invent other formats>
+参考导演：<one-line value — optional reference director/style; write "无" if none>
+
+[Field hard rules]
+- Each field value must be a single line
+- Each value ≤ 50 Chinese chars or ~80 English chars — keep it lean
+- Respect user preference: if the user specified "真人", set 视觉风格 to "写实真人电影"; if unspecified, infer the best-fit value
+- 画幅比例 must be strictly one of the four; do not write variants like "1920x1080"
+- 参考导演 is optional but the field itself cannot be omitted — write "无" if absent`;
+const SCRIPT_GENERATE_CHARACTER_SECTION_EN = `=== 2. Character Descriptions ===
+
+**Also machine-readable. Output one block per named character with these 5 fields, labels verbatim, no markdown bullets, no dash-prefix, no merging. Labels stay Chinese. Blank line between character blocks.**
+
+角色：<character name — must exactly match the name used in the script>
+外貌：<gender, age, height/build, face shape, features, skin tone, hair colour/style — one line>
+服饰：<specific garments, material, colour, accessories — one line>
+标志特征：<scars, glasses, tattoos, birthmarks, jewellery; write "无" if none — one line>
+气质姿态：<body language, gait, habitual actions, manner of speech — one line>
+
+(Each value single line; blank line between adjacent character blocks; no container/code blocks)`;
+const SCRIPT_GENERATE_SCENE_SECTION_EN = `=== 3. Scenes ===
+Professional screenplay format:
+- Scene heading: "场景 [N] — [内景/外景]. [地点] — [时间]"
+- Scene parenthetical for camera direction
+- Each scene: visual setting (color, spatial relations, lighting quality) + dialogue + action`;
+const SCRIPT_GENERATE_SCREENWRITING_PRINCIPLES_EN = `Screenwriting principles:
+- Open with a hook — a striking visual image or curiosity moment
+- Every scene must serve the story: advance plot, reveal character, or build tension
+- "Show, don't tell" — prefer visual storytelling over narration
+- Dialogue should be natural and vivid; subtext over on-the-nose lines
+- Build a clear three-act structure: setup → conflict → resolution
+- End on emotional closure — a twist, a catharsis, or a strong image
+- Adjust scene count to the target runtime; ~one scene per 30-60s
+- Each scene description must be specific enough for the AI image generator (color, spatial relations, lighting quality)
+- Scene descriptions must match the declared visual style
+[Battle/duel special rule] If the idea/title contains battle signal words (大战/对决/决战/battle/fight/duel...), treat it as a real fight: physical combat scenes ≥ 50% of all scenes; both sides must be active combatants; no "epiphany/mental-space" shortcuts.
+Do not output JSON or markdown code fences. Output plain-text script only.`;
+
 const scriptGenerateDef: PromptDefinition = {
   key: "script_generate",
   nameKey: "promptTemplates.prompts.scriptGenerate",
   descriptionKey: "promptTemplates.prompts.scriptGenerateDesc",
   category: "script",
   slots: [
-    slot("role_definition", SCRIPT_GENERATE_ROLE_DEFINITION, true),
-    slot("language_rules", SCRIPT_GENERATE_LANGUAGE_RULES, false),
-    slot("output_format", SCRIPT_GENERATE_OUTPUT_FORMAT, false),
-    slot("visual_style_section", SCRIPT_GENERATE_VISUAL_STYLE_SECTION, true),
-    slot("character_section", SCRIPT_GENERATE_CHARACTER_SECTION, true),
-    slot("scene_section", SCRIPT_GENERATE_SCENE_SECTION, true),
+    slot("role_definition", SCRIPT_GENERATE_ROLE_DEFINITION, true, SCRIPT_GENERATE_ROLE_DEFINITION_EN),
+    slot("language_rules", SCRIPT_GENERATE_LANGUAGE_RULES, false, SCRIPT_GENERATE_LANGUAGE_RULES_EN),
+    slot("output_format", SCRIPT_GENERATE_OUTPUT_FORMAT, false, SCRIPT_GENERATE_OUTPUT_FORMAT_EN),
+    slot("visual_style_section", SCRIPT_GENERATE_VISUAL_STYLE_SECTION, true, SCRIPT_GENERATE_VISUAL_STYLE_SECTION_EN),
+    slot("character_section", SCRIPT_GENERATE_CHARACTER_SECTION, true, SCRIPT_GENERATE_CHARACTER_SECTION_EN),
+    slot("scene_section", SCRIPT_GENERATE_SCENE_SECTION, true, SCRIPT_GENERATE_SCENE_SECTION_EN),
     slot(
       "screenwriting_principles",
       SCRIPT_GENERATE_SCREENWRITING_PRINCIPLES,
-      true
+      true,
+      SCRIPT_GENERATE_SCREENWRITING_PRINCIPLES_EN
     ),
   ],
   buildFullPrompt(sc) {
@@ -395,17 +445,36 @@ const SCRIPT_PARSE_LANGUAGE_RULES = `【关键语言规则】JSON中的所有文
 
 仅返回有效JSON。不要使用markdown代码块。不要添加任何评论。`;
 
+const SCRIPT_PARSE_ROLE_DEFINITION_EN = `You are a senior script supervisor and structural editor, skilled at **parsing** narrative text into structured screenplay JSON suitable for an animated short-film pipeline. Your task: read the user's original story/prose and turn it into structured JSON.`;
+const SCRIPT_PARSE_FIDELITY_RULES_EN = `=== Source Fidelity (top priority — this rule overrides all others) ===
+Core principle: the output JSON must be a "lossless structuring" of the source. Deleting, compressing, or rewriting any narrative content is forbidden. Preserve every scene, line of dialogue, and descriptive detail.`;
+const SCRIPT_PARSE_OUTPUT_FORMAT_EN = `Output a single JSON object:
+{
+  "title": "compelling title",
+  "synopsis": "1-2 sentence story summary, capturing core conflict and stakes",
+  "setting": "time and place",
+  "mood": "overall emotional tone",
+  "scenes": [ { "description": "...", "dialogues": [ { "character": "...", "text": "...", "emotion": "..." } ] } ]
+}`;
+const SCRIPT_PARSE_PARSING_RULES_EN = `Story-editing principles (applied **on the premise of source fidelity**; any clause that conflicts with fidelity defers to it):
+- Preserve the author's intent, tone, and style
+- Keep scene boundaries at natural narrative turns
+- Never drop dialogue or visual detail`;
+const SCRIPT_PARSE_LANGUAGE_RULES_EN = `[Language rule] All text content in the JSON (title, synopsis, setting, description, mood, dialogue text, emotion) must use the same language as the source. Chinese source → Chinese output. Do not translate to English.
+
+Return only valid JSON. No markdown code fences. No comments.`;
+
 const scriptParseDef: PromptDefinition = {
   key: "script_parse",
   nameKey: "promptTemplates.prompts.scriptParse",
   descriptionKey: "promptTemplates.prompts.scriptParseDesc",
   category: "script",
   slots: [
-    slot("role_definition", SCRIPT_PARSE_ROLE_DEFINITION, true),
-    slot("original_fidelity", SCRIPT_PARSE_FIDELITY_RULES, true),
-    slot("output_format", SCRIPT_PARSE_OUTPUT_FORMAT, false),
-    slot("parsing_rules", SCRIPT_PARSE_PARSING_RULES, true),
-    slot("language_rules", SCRIPT_PARSE_LANGUAGE_RULES, false),
+    slot("role_definition", SCRIPT_PARSE_ROLE_DEFINITION, true, SCRIPT_PARSE_ROLE_DEFINITION_EN),
+    slot("original_fidelity", SCRIPT_PARSE_FIDELITY_RULES, true, SCRIPT_PARSE_FIDELITY_RULES_EN),
+    slot("output_format", SCRIPT_PARSE_OUTPUT_FORMAT, false, SCRIPT_PARSE_OUTPUT_FORMAT_EN),
+    slot("parsing_rules", SCRIPT_PARSE_PARSING_RULES, true, SCRIPT_PARSE_PARSING_RULES_EN),
+    slot("language_rules", SCRIPT_PARSE_LANGUAGE_RULES, false, SCRIPT_PARSE_LANGUAGE_RULES_EN),
   ],
   buildFullPrompt(sc) {
     const s = this.slots;
@@ -468,17 +537,49 @@ const SCRIPT_SPLIT_OUTPUT_FORMAT = `输出格式——结构化文本标记格�
 ═══ 分集角色 ═══
 你将获得完整的角色列表。为每一集列出所有实际出场的角色名（主角和配角）。使用提供的原名。不要在每一集都包含所有角色——只包含真正出场、有台词或直接参与剧情的角色。`;
 
+const SCRIPT_SPLIT_ROLE_DEFINITION_EN = `You are an award-winning screenwriter skilled in episodic animated content. Your task: adapt the raw source material (a novel, article, report, story, or any text) into an episodic screenplay format, split by target duration.`;
+const SCRIPT_SPLIT_SPLITTING_RULES_EN = `Rules:
+1. Each episode must be a self-contained narrative unit with a clear beginning, development, and suspense/ending.
+2. Split at natural story boundaries — scene changes, time jumps, or perspective shifts.`;
+const SCRIPT_SPLIT_IDEA_REQUIREMENTS_EN = `5. The "idea" field is the sole input for the standalone AI script generator. It must be extremely detailed:
+- Start with the list of appearing characters and their roles
+- Copy the source's key passages and dialogue for this episode verbatim — preserve the original wording, do not summarise
+- Add scene-transition notes and emotional beat markers. The downstream script generator cannot access the source — this field is its only reference.`;
+const SCRIPT_SPLIT_LANGUAGE_RULES_EN = `[Language rule] All output fields (title, description, keywords, script) must use the same language as the source. Chinese input → Chinese output; English input → English output.`;
+const SCRIPT_SPLIT_OUTPUT_FORMAT_EN = `Output format — structured text markers. No JSON, no markdown code fences, no comments:
+
+=== Episode 1 ===
+Title: episode title
+Description: brief plot summary of this episode
+Keywords: keyword1, keyword2, keyword3
+Characters: character1, character2
+Plot idea:
+1) List all characters in this episode and their roles. 2) Copy the source's key passages and dialogue verbatim. 3) Add scene-transition notes and emotional beat markers.
+
+=== Episode 2 ===
+Title: ...
+Description: ...
+Keywords: ...
+Characters: ...
+Plot idea:
+...
+
+Note: Title, Description, Keywords, and Characters are single-line fields, each on its own line. The plot-idea body starts after its label line and runs until the next "=== Episode N ===" separator; it may span multiple paragraphs.
+
+[Episode characters]
+You will be given the full character list. For each episode, list every character who actually appears (main and supporting). Use the provided original names. Do not include every character in every episode — only those who appear, speak, or directly affect the plot.`;
+
 const scriptSplitDef: PromptDefinition = {
   key: "script_split",
   nameKey: "promptTemplates.prompts.scriptSplit",
   descriptionKey: "promptTemplates.prompts.scriptSplitDesc",
   category: "script",
   slots: [
-    slot("role_definition", SCRIPT_SPLIT_ROLE_DEFINITION, true),
-    slot("splitting_rules", SCRIPT_SPLIT_SPLITTING_RULES, true),
-    slot("idea_requirements", SCRIPT_SPLIT_IDEA_REQUIREMENTS, true),
-    slot("language_rules", SCRIPT_SPLIT_LANGUAGE_RULES, false),
-    slot("output_format", SCRIPT_SPLIT_OUTPUT_FORMAT, false),
+    slot("role_definition", SCRIPT_SPLIT_ROLE_DEFINITION, true, SCRIPT_SPLIT_ROLE_DEFINITION_EN),
+    slot("splitting_rules", SCRIPT_SPLIT_SPLITTING_RULES, true, SCRIPT_SPLIT_SPLITTING_RULES_EN),
+    slot("idea_requirements", SCRIPT_SPLIT_IDEA_REQUIREMENTS, true, SCRIPT_SPLIT_IDEA_REQUIREMENTS_EN),
+    slot("language_rules", SCRIPT_SPLIT_LANGUAGE_RULES, false, SCRIPT_SPLIT_LANGUAGE_RULES_EN),
+    slot("output_format", SCRIPT_SPLIT_OUTPUT_FORMAT, false, SCRIPT_SPLIT_OUTPUT_FORMAT_EN),
   ],
   buildFullPrompt(sc) {
     const s = this.slots;
@@ -808,25 +909,67 @@ const CHAR_EXTRACT_PHASE_POOL_RULES = `═══ Phase 角色池匹配（比角�
 - Phase 池中的角色保持其原有 scope（main/guest），不要改变
 - 新角色默认为 support，除非明显是核心角色`;
 
+const CHAR_EXTRACT_ROLE_DEFINITION_EN = `You are a senior character designer, director of photography, and art director. Your character descriptions are the sole authoritative visual reference fed directly into the AI image generator. Every word you write determines how the character looks — be precise, concrete, and visual.`;
+const CHAR_EXTRACT_STYLE_DETECTION_EN = `═══ Step 1 — Identify the visual style ═══
+Detect the style declared or implied by the script:
+- "photoreal" / "live-action" / "photo-grade" → describe as real photography or high-end CG, no anime aesthetics
+- "anime" / "manga" → describe with anime proportions and stylised features
+- "3D CG" → describe as a 3D rendering pipeline
+- "2D cartoon" → describe as cartoon illustration
+The style must appear in every character description.`;
+const CHAR_EXTRACT_PHASE_POOL_RULES_EN = `═══ Phase character-pool matching (higher priority than the filtering rules) ═══
+You will see the project's existing characters and their visual-phase list in the user prompt's "existing Phase character pool".
+[Matching existing characters]
+- If a script character's name matches a baseName in the pool, reuse that exact baseName
+- Do not regenerate a full visual spec for existing characters — a downstream template already defines them
+- For existing characters the description may just be the character name; keep visualHint consistent with the pool
+[Marking new characters]
+- Characters not in the pool get scope="support" and need a full description
+- Keep existing characters' original scope (main/guest); new characters default to support unless clearly central.`;
+const CHAR_EXTRACT_OUTPUT_FORMAT_EN = `═══ Output format ═══
+Return a JSON object only — no markdown fences, no comments:
+{ "characters": [ { "name", "baseName", "scope", "personality", "episodes": [ { "episodeIndex", "visualHint", "description", "t2iStructure": { age, subject, body, face, hair, clothing, lighting } } ] ], "relationships": [ { "characterA", "characterB", "relationType", "description" } ] }`;
+const CHAR_EXTRACT_SCOPE_RULES_EN = `═══ Character classification rules ═══
+- "main": story-driving core characters appearing in multiple scenes or critical to the plot
+- "guest": named characters with dialogue who recur across scenes but don't drive the story
+- "support": brief minor/background characters
+When unsure, prefer "main". A character with substantive dialogue, plot impact, or a needed visual (even a photo/legacy image) is "main".`;
+const CHAR_EXTRACT_PRESENCE_RULES_EN = `═══ Present vs. referenced (boundary constraint — top priority) ═══
+Only extract characters who are "present".
+- Present: the character has substantive on-scene action, dialogue, or physical presence in the current unit.
+- Referenced: the character is only mentioned in narration, dialogue, or memory — ignore it.
+Self-check: before generating each character, confirm it has a concrete scene position, not just a mention in someone's dialogue or memory.`;
+const CHAR_EXTRACT_DESCRIPTION_REQUIREMENTS_EN = `═══ Description requirements ═══
+Write a dense, precise single paragraph covering: style tag, body & temperament, face (close-up detail), hair, clothing (fit + material + color), weapons/gear, signature features, a 3-5 colour palette, and a closing lighting sentence. The description is passed verbatim to the image generator.
+Note for body type: convey build via contour/shadow/proportion, not literal bone/organ words (Qwen renders them literally as white bones / transparent body).`;
+const CHAR_EXTRACT_WRITING_RULES_EN = `═══ Writing rules ═══
+- One continuous paragraph — no bullets or line breaks inside the description field
+- Be specific enough that two different AI image generators produce the same character
+- Use precise colour names (not just "red", but "blood red" or "rose pink")
+- For non-human characters, describe unique anatomical features with the same precision`;
+const CHAR_EXTRACT_LANGUAGE_RULES_EN = `[Language rule] Every field must use the same language as the script. Chinese script → Chinese output. English script → English output. Character names must exactly match the script.
+Return JSON only. No markdown fences. No comments.`;
+
 const characterExtractDef: PromptDefinition = {
   key: "character_extract",
   nameKey: "promptTemplates.prompts.characterExtract",
   descriptionKey: "promptTemplates.prompts.characterExtractDesc",
   category: "character",
   slots: [
-    slot("role_definition", CHAR_EXTRACT_ROLE_DEFINITION, true),
-    slot("style_detection", CHAR_EXTRACT_STYLE_DETECTION, true),
-    slot("phase_pool_matching", CHAR_EXTRACT_PHASE_POOL_RULES, true),
-    slot("output_format", CHAR_EXTRACT_OUTPUT_FORMAT, false),
-    slot("scope_rules", CHAR_EXTRACT_SCOPE_RULES, true),
-    slot("presence_rules", CHAR_EXTRACT_PRESENCE_RULES, true),
+    slot("role_definition", CHAR_EXTRACT_ROLE_DEFINITION, true, CHAR_EXTRACT_ROLE_DEFINITION_EN),
+    slot("style_detection", CHAR_EXTRACT_STYLE_DETECTION, true, CHAR_EXTRACT_STYLE_DETECTION_EN),
+    slot("phase_pool_matching", CHAR_EXTRACT_PHASE_POOL_RULES, true, CHAR_EXTRACT_PHASE_POOL_RULES_EN),
+    slot("output_format", CHAR_EXTRACT_OUTPUT_FORMAT, false, CHAR_EXTRACT_OUTPUT_FORMAT_EN),
+    slot("scope_rules", CHAR_EXTRACT_SCOPE_RULES, true, CHAR_EXTRACT_SCOPE_RULES_EN),
+    slot("presence_rules", CHAR_EXTRACT_PRESENCE_RULES, true, CHAR_EXTRACT_PRESENCE_RULES_EN),
     slot(
       "description_requirements",
       CHAR_EXTRACT_DESCRIPTION_REQUIREMENTS,
-      true
+      true,
+      CHAR_EXTRACT_DESCRIPTION_REQUIREMENTS_EN
     ),
-    slot("writing_rules", CHAR_EXTRACT_WRITING_RULES, true),
-    slot("language_rules", CHAR_EXTRACT_LANGUAGE_RULES, false),
+    slot("writing_rules", CHAR_EXTRACT_WRITING_RULES, true, CHAR_EXTRACT_WRITING_RULES_EN),
+    slot("language_rules", CHAR_EXTRACT_LANGUAGE_RULES, false, CHAR_EXTRACT_LANGUAGE_RULES_EN),
   ],
   buildFullPrompt(sc) {
     const s = this.slots;
@@ -916,15 +1059,31 @@ const IMPORT_CHAR_OUTPUT_FORMAT = `输出格式——仅JSON对象，不要markd
 
 仅返回JSON对象。不要markdown。不要评论。`;
 
+const IMPORT_CHAR_ROLE_DEFINITION_EN = `You are a senior character designer, director of photography, and art director. Your task: extract every named character from the given text, estimate appearance frequency, and produce a professional visual spec for each.`;
+const IMPORT_CHAR_EXTRACTION_RULES_EN = `Rules (zero-omission principle):
+1. Extract every character named in the text — even if mentioned only once, with no dialogue; a name that appears must be extracted
+2. Estimate each character's approximate appearance frequency
+3. Generate a full visual spec (identity-preserving, style-reinterpretable)
+4. Build the relationships array for meaningful character pairs`;
+const IMPORT_CHAR_OUTPUT_FORMAT_EN = `Output: a JSON object only — no markdown fences, no comments:
+{
+  "characters": [
+    { "name": "character name, exactly as it appears in the text", "frequency": 5, "scope": "main or guest", "description": "full visual spec — one dense paragraph", "visualHint": "2-4 char appearance tag" }
+  ],
+  "relationships": [ { "characterA", "characterB", "relationType": "ally|enemy|lover|family|mentor|rival|stranger|neutral", "description": "short relation description" } ]
+}
+
+Return only the JSON object. No markdown, no comments.`;
+
 const importCharacterExtractDef: PromptDefinition = {
   key: "import_character_extract",
   nameKey: "promptTemplates.prompts.importCharacterExtract",
   descriptionKey: "promptTemplates.prompts.importCharacterExtractDesc",
   category: "character",
   slots: [
-    slot("role_definition", IMPORT_CHAR_ROLE_DEFINITION, true),
-    slot("extraction_rules", IMPORT_CHAR_EXTRACTION_RULES, true),
-    slot("output_format", IMPORT_CHAR_OUTPUT_FORMAT, false),
+    slot("role_definition", IMPORT_CHAR_ROLE_DEFINITION, true, IMPORT_CHAR_ROLE_DEFINITION_EN),
+    slot("extraction_rules", IMPORT_CHAR_EXTRACTION_RULES, true, IMPORT_CHAR_EXTRACTION_RULES_EN),
+    slot("output_format", IMPORT_CHAR_OUTPUT_FORMAT, false, IMPORT_CHAR_OUTPUT_FORMAT_EN),
   ],
   buildFullPrompt(sc) {
     const s = this.slots;
@@ -935,16 +1094,29 @@ const importCharacterExtractDef: PromptDefinition = {
 
 // ─── 5.5. project_assess ───────────────────────────────
 
+const PROJECT_ASSESS_SYSTEM_EN = `You are a senior film art director and creative director with 20+ years of experience across film, animation, and series art design. Your task: read the opening text of a work and, in one pass, output its visual-style, era-aesthetic, mood, and a visual direction summary.`;
+const PROJECT_ASSESS_DIMENSIONS_EN = `[Analysis dimensions]
+- Art style (pick the closest match): photoreal film / CG 3D / Japanese anime / 2D cartoon / watercolor / pixel
+- Color keynote: dominant hues + warm/cool bias
+- Era aesthetic: era + aesthetic backdrop
+- Mood/emotion: overall emotional tone
+- Aspect ratio: 16:9 / 9:16 / 2.35:1 / 1:1`;
+const PROJECT_ASSESS_OUTPUT_EN = `[Output format]
+Return JSON only, no markdown, no comments:
+{ "visualStyle": "...", "eraAesthetic": "...", "moodDirection": "...", "visualDirection": "..." }`;
+const PROJECT_ASSESS_LANGUAGE_EN = `[Language rule]
+All field values must use the same language as the source. Chinese source → Chinese output. English source → English output. Return JSON only.`;
+
 const projectAssessDef: PromptDefinition = {
   key: "project_assess",
   nameKey: "promptTemplates.prompts.projectAssess",
   descriptionKey: "promptTemplates.prompts.projectAssessDesc",
   category: "script",
   slots: [
-    slot("role_definition", PROJECT_ASSESS_SYSTEM, true),
-    slot("dimensions", getAssessDimensions(), true),
-    slot("output_format", PROJECT_ASSESS_OUTPUT, false),
-    slot("language_rules", PROJECT_ASSESS_LANGUAGE, false),
+    slot("role_definition", PROJECT_ASSESS_SYSTEM, true, PROJECT_ASSESS_SYSTEM_EN),
+    slot("dimensions", getAssessDimensions(), true, PROJECT_ASSESS_DIMENSIONS_EN),
+    slot("output_format", PROJECT_ASSESS_OUTPUT, false, PROJECT_ASSESS_OUTPUT_EN),
+    slot("language_rules", PROJECT_ASSESS_LANGUAGE, false, PROJECT_ASSESS_LANGUAGE_EN),
   ],
   buildFullPrompt(sc) {
     const s = this.slots;
@@ -955,17 +1127,34 @@ const projectAssessDef: PromptDefinition = {
 
 // ─── 5.6. character_arc ────────────────────────────────
 
+const CHARACTER_ARC_SYSTEM_EN = `You are a senior character designer and script-analysis expert, skilled at identifying a character's stage-by-stage transformations in long-form narrative, and designing the precise visual appearance for each stage. Your task: for **every character**, produce a character arc with 2-7 visual phases.`;
+const CHARACTER_ARC_DETECTION_EN = `═══ Arc design rules ═══
+Every character needs an arc. Main and supporting characters both need arcs.
+- Main (scope=main): typically 2-7 phases
+- Supporting/guest: 1-3 phases
+Detect turning points where a character's appearance, age, status, or costume changes.`;
+const CHARACTER_ARC_PHASE_RULES_EN = `═══ Phase splitting rules ═══
+Each phase = a stable visual state of the character over a time span. Phase count follows the character's actual transformations:
+- Main characters: more phases; supporting: fewer
+- A phase boundary is where something visible changes (age, outfit, injury, status)
+- Record episodeStart / episodeEnd for each phase (a range, unioned across episodes)`;
+const CHARACTER_ARC_OUTPUT_EN = `═══ Output format ═══
+Return JSON only:
+{ "characterArcs": [ { "characterName": "...", "phases": [ { "phaseName": "...", "episodeStart": 1, "episodeEnd": 2, "visualChanges": "..." } ] } ] }`;
+const CHARACTER_ARC_LANGUAGE_EN = `[Language rule]
+All field values must use the same language as the source. Chinese source → Chinese output. English source → English output.`;
+
 const characterArcDef: PromptDefinition = {
   key: "character_arc",
   nameKey: "promptTemplates.prompts.characterArc",
   descriptionKey: "promptTemplates.prompts.characterArcDesc",
   category: "character",
   slots: [
-    slot("role_definition", CHARACTER_ARC_SYSTEM, true),
-    slot("detection_rules", CHARACTER_ARC_DETECTION, true),
-    slot("phase_rules", CHARACTER_ARC_PHASE_RULES, true),
-    slot("output_format", CHARACTER_ARC_OUTPUT, false),
-    slot("language_rules", CHARACTER_ARC_LANGUAGE, false),
+    slot("role_definition", CHARACTER_ARC_SYSTEM, true, CHARACTER_ARC_SYSTEM_EN),
+    slot("detection_rules", CHARACTER_ARC_DETECTION, true, CHARACTER_ARC_DETECTION_EN),
+    slot("phase_rules", CHARACTER_ARC_PHASE_RULES, true, CHARACTER_ARC_PHASE_RULES_EN),
+    slot("output_format", CHARACTER_ARC_OUTPUT, false, CHARACTER_ARC_OUTPUT_EN),
+    slot("language_rules", CHARACTER_ARC_LANGUAGE, false, CHARACTER_ARC_LANGUAGE_EN),
   ],
   buildFullPrompt(sc) {
     const s = this.slots;
@@ -1257,19 +1446,64 @@ const CHAR_IMAGE_CONSISTENCY_RULES = `=== 四视角一致性（下游流水线�
 const CHAR_IMAGE_NAME_LABEL = `=== 角色名标签 ===
 {{NAME_LABEL_PLACEHOLDER}}`;
 
+const CHAR_IMAGE_STYLE_MATCHING_EN = `=== Key: art-style matching (top priority) ===
+Read the character description below. It specifies or implies an art style. You must match it precisely. Do not default to a realistic style.
+- If a reference image is attached, its visual style is ground truth — match it exactly
+- The output style must stay consistent with the character reference sheet`;
+const CHAR_IMAGE_FACE_DETAIL_EN = `=== Face — high fidelity ===
+Render the face at high fidelity for the chosen art style:
+- Clear, consistent facial features: skeletal structure, eye shape, nose shape, mouth shape — all matching the description
+- Skin tone and texture consistent across every view`;
+const CHAR_IMAGE_FRONT_VIEW_LAYOUT_EN = `=== Front view layout (character sheet step 1 — front reference) ===
+Generate a full-body standing front view:
+- Show the character head-to-toe, including shoe/sole detail
+- Arms relaxed at the sides, feet shoulder-width apart
+- Pure white background, no texture
+Technical constraints:
+- Portrait full-body aspect (9:16 or narrower)
+- Keep ≥5% white margin between the soles and the bottom edge
+- No half-body / waist / knee crops — must be a full standing full-body`;
+const CHAR_IMAGE_FOUR_VIEW_LAYOUT_EN = `=== Four-view layout (strictly follow — core output of the character sheet) ===
+**Mandatory four views**: the final image must show four independent views left-to-right on a pure white canvas. No single-view portrait, no 2-3 views, no scene background. This is a professional character turnaround / three-or-four-view sheet.
+Views (left to right):
+1. Front (0°): facing camera, shoulders square, arms relaxed, full front costume
+2. Three-quarter (≈45°): shows facial depth, cheekbone and nose bridge, costume layering
+3. Profile (90°): nose-to-chin silhouette, hair side volume, weapon strap, cloak
+4. Back (180°): back of head, hair ornament, back costume embroidery, cloak, back gear
+Composition:
+- Wide (16:9 or wider) canvas, pure white, adequate spacing between views
+- Align top-of-head, waistline, and soles across all views
+- Uniform standing full-body framing; if the character holds a weapon, the front view shows the grip and other views show part of it`;
+const CHAR_IMAGE_LIGHTING_RENDERING_EN = `=== Lighting & rendering ===
+- Clean professional three-point lighting: key light from front-upper ~45°, fill from the opposite side, rim light separating the figure from the white background
+- Light quality must fit the art style (soft studio light for realistic, cel-style hard shadow for anime, subtle volumetric light for xianxia)
+- Pure white background, no gradient/texture/floor shadow (or a very faint contact shadow)
+- All four views must share the same light direction and colour temperature
+- Aim for the highest rendering quality within the chosen style`;
+const CHAR_IMAGE_CONSISTENCY_RULES_EN = `=== Four-view consistency (the life-or-death line of the downstream pipeline) ===
+This reference is reused as the authoritative source for every later shot — any inconsistency is amplified into a visible mismatch in the final cut. Enforce strictly:
+- Identity: all four views are the same person (same facial skeleton, height proportion, feature positions, skin tone)
+- Costume: every garment, accessory, belt buckle, button, embroidery, pocket aligned; identical colour values
+- Hair: colour, volume, length, bangs shape, ornament position — same hairstyle from different angles
+- Weapons: colour, length, grip style, mounting position consistent across views
+- Build: shoulder width, waist, leg-length proportion aligned per view
+- Expression & temperament: one neutral/subtle expression and consistent temperament across all views`;
+const CHAR_IMAGE_NAME_LABEL_EN = `=== Character name label ===
+{{NAME_LABEL_PLACEHOLDER}}`;
+
 const characterImageDef: PromptDefinition = {
   key: "character_image",
   nameKey: "promptTemplates.prompts.characterImage",
   descriptionKey: "promptTemplates.prompts.characterImageDesc",
   category: "character",
   slots: [
-    slot("style_matching", CHAR_IMAGE_STYLE_MATCHING, true),
-    slot("face_detail", CHAR_IMAGE_FACE_DETAIL, true),
-    slot("front_view_layout", CHAR_IMAGE_FRONT_VIEW_LAYOUT, true),
-    slot("four_view_layout", CHAR_IMAGE_FOUR_VIEW_LAYOUT, true),
-    slot("lighting_rendering", CHAR_IMAGE_LIGHTING_RENDERING, true),
-    slot("consistency_rules", CHAR_IMAGE_CONSISTENCY_RULES, true),
-    slot("name_label", CHAR_IMAGE_NAME_LABEL, false),
+    slot("style_matching", CHAR_IMAGE_STYLE_MATCHING, true, CHAR_IMAGE_STYLE_MATCHING_EN),
+    slot("face_detail", CHAR_IMAGE_FACE_DETAIL, true, CHAR_IMAGE_FACE_DETAIL_EN),
+    slot("front_view_layout", CHAR_IMAGE_FRONT_VIEW_LAYOUT, true, CHAR_IMAGE_FRONT_VIEW_LAYOUT_EN),
+    slot("four_view_layout", CHAR_IMAGE_FOUR_VIEW_LAYOUT, true, CHAR_IMAGE_FOUR_VIEW_LAYOUT_EN),
+    slot("lighting_rendering", CHAR_IMAGE_LIGHTING_RENDERING, true, CHAR_IMAGE_LIGHTING_RENDERING_EN),
+    slot("consistency_rules", CHAR_IMAGE_CONSISTENCY_RULES, true, CHAR_IMAGE_CONSISTENCY_RULES_EN),
+    slot("name_label", CHAR_IMAGE_NAME_LABEL, false, CHAR_IMAGE_NAME_LABEL_EN),
   ],
   buildFullPrompt(sc, params) {
     const s = this.slots;
@@ -1349,16 +1583,31 @@ const PHASE_IMAGE_OUTPUT = `=== 输出标准 ===
 - 专业三点布光（主光45°前上方、补光对侧柔化、轮廓光分离角色与背景）
 - 零AI瑕疵，与参考图身份完全一致`;
 
+const PHASE_IMAGE_ROLE_EN = `You are a professional character visual-phase designer. Based on the reference image (Template.front_view_image), generate front-view full-body views of the same character across different age / identity / status phases. Keep the core identity features unchanged and precisely apply the specified visual changes.`;
+const PHASE_IMAGE_IDENTITY_EN = `=== Identity-preservation rules ===
+Features that MUST stay unchanged:
+- Facial skeleton, eye spacing, nose shape, lip shape, jawline
+- Body proportions (head-to-body ratio, shoulder width, limb length)
+- Signature identifiers (weapon, headwear, distinctive colour palette)`;
+const PHASE_IMAGE_CHANGES_EN = `=== Change-application rules ===
+Apply each item in visual_changes one by one:
+- faceAge: age changes are conveyed via skin tightness, wrinkle depth, grey hair
+- costume / accessory / status changes are applied while identity anchors are preserved`;
+const PHASE_IMAGE_OUTPUT_EN = `=== Output standard ===
+- Pure white background, no texture
+- Full-body standing front view, head-to-toe
+- Professional three-point lighting (key 45° front-upper, opposite-side fill, rim light)`;
+
 const phaseImageDef: PromptDefinition = {
   key: "phase_image",
   nameKey: "promptTemplates.prompts.phaseImage",
   descriptionKey: "promptTemplates.prompts.phaseImageDesc",
   category: "character",
   slots: [
-    slot("role_definition", PHASE_IMAGE_ROLE, true),
-    slot("identity_preservation", PHASE_IMAGE_IDENTITY, true),
-    slot("change_rules", PHASE_IMAGE_CHANGES, true),
-    slot("output_standard", PHASE_IMAGE_OUTPUT, false),
+    slot("role_definition", PHASE_IMAGE_ROLE, true, PHASE_IMAGE_ROLE_EN),
+    slot("identity_preservation", PHASE_IMAGE_IDENTITY, true, PHASE_IMAGE_IDENTITY_EN),
+    slot("change_rules", PHASE_IMAGE_CHANGES, true, PHASE_IMAGE_CHANGES_EN),
+    slot("output_standard", PHASE_IMAGE_OUTPUT, false, PHASE_IMAGE_OUTPUT_EN),
   ],
   buildFullPrompt(sc, params) {
     const s = this.slots;
@@ -1754,27 +2003,60 @@ const SHOT_SPLIT_LANGUAGE_RULES = `【关键语言规则】所有文本字段（
 const SHOT_SPLIT_PROPORTIONAL_TIERS_TEMPLATE = `=== 比例差异规则 ===
 {{PROPORTIONAL_TIERS}}`;
 
+const SHOT_SPLIT_ROLE_DEFINITION_EN = `You are an experienced storyboard director and director of photography, skilled at short animated films. The shot list you plan must be visually dynamic, narratively efficient, and optimised for the AI video-generation pipeline (first frame → last frame → interpolated video).`;
+const SHOT_SPLIT_FIDELITY_RULES_EN = `=== Script Fidelity (top priority — this rule overrides all others) ===
+You are a director, not an editor. **No condensing, no compressing, no omitting** any narrative content from the script. Every line of dialogue, action, and scene description in the source must be carried into the shots.`;
+const SHOT_SPLIT_OUTPUT_FORMAT_EN = `Output a JSON array (only shared shot metadata; the downstream generates first/last frames and reference images from the same metadata):
+[
+  { "sequence": 1, "sceneDescription": "...", "startFrame": "...", "endFrame": "...", "motionScript": "...", "videoScript": "...", "duration": {{MIN_DURATION}}, "cameraDirection": "static", "dialogues": [ { "character": "...", "text": "...", "emotion": "..." } ] }
+]
+Only shared metadata is output — the actual frame and reference images are generated downstream from it.`;
+const SHOT_SPLIT_START_END_FRAME_RULES_EN = `=== First & last frame requirements (critical — drives image generation directly) ===
+Every frame must be a self-contained image-generation prompt containing:
+- Composition: foreground / midground / background layout
+- Subject: character positions, poses, expressions
+- Lighting and colour consistent within the shot`;
+const SHOT_SPLIT_MOTION_SCRIPT_RULES_EN = `=== motionScript requirements ===
+- motionScript is the full unfolding of the script beat, not an action summary. Every action in the source beat must appear, time-segmented (0-Xs: ... Xs-Ys: ...).`;
+const SHOT_SPLIT_VIDEO_SCRIPT_RULES_EN = `=== videoScript requirements (Seedance 2.0 style) ===
+- Purpose: primary input to the video model — drives all motion; must be a natural 1-2 sentence prompt with core motion and camera arc, no timestamps.`;
+const SHOT_SPLIT_PROPORTIONAL_TIERS_EN = `=== Proportional-difference rules ===
+{{PROPORTIONAL_TIERS}}`;
+const SHOT_SPLIT_CAMERA_DIRECTIONS_EN = `Camera-movement directions (for the cameraDirection field only):
+**Important: cameraDirection is technical metadata; values must come from the list below.**
+Allowed: static, pan left, pan right, tilt up, tilt down, dolly in, dolly out, truck left, truck right, crane up, crane down, handheld, orbit, zoom in, zoom out, handheld shake. Write exactly one of these terms; keep it in English (technical term).`;
+const SHOT_SPLIT_CINEMATOGRAPHY_PRINCIPLES_EN = `Cinematography principles:
+- Vary shot scale — alternate wide / medium / close-up; avoid identical framing on consecutive shots
+- Open new scenes with an establishing shot
+- Use reaction shots after important dialogue or events
+- Keep action momentum; match shot length to {{MIN_DURATION}}–{{MAX_DURATION}}s
+- Cap dialogue beats at {{DIALOGUE_MAX}}s, action beats at {{ACTION_MAX}}s, establishing shots at {{ESTABLISHING_MAX}}s`;
+const SHOT_SPLIT_LANGUAGE_RULES_EN = `[Language rule] All text fields (sceneDescription, startFrame, endFrame, motionScript, dialogues.text, dialogues.character) must use the same language as the script. If the script is Chinese, all fields are Chinese. Only "cameraDirection" stays in English (technical term).`;
+const SHOT_SPLIT_VOICE_CONSTRAINT_EN = `〓 Voice constraints — per-shot hard rules (every shot must comply)
+⚠️ Every shot must satisfy: narrations + innerMonologue + dialogues count within limits; no shot may exceed the per-shot voice budget.`;
+
 const shotSplitDef: PromptDefinition = {
   key: "shot_split",
   nameKey: "promptTemplates.prompts.shotSplit",
   descriptionKey: "promptTemplates.prompts.shotSplitDesc",
   category: "shot",
   slots: [
-    slot("role_definition", SHOT_SPLIT_ROLE_DEFINITION, true),
-    slot("script_fidelity", SHOT_SPLIT_FIDELITY_RULES, true),
-    slot("output_format", SHOT_SPLIT_OUTPUT_FORMAT_TEMPLATE, false),
-    slot("start_end_frame_rules", SHOT_SPLIT_START_END_FRAME_RULES, true),
-    slot("motion_script_rules", SHOT_SPLIT_MOTION_SCRIPT_RULES, true),
-    slot("video_script_rules", SHOT_SPLIT_VIDEO_SCRIPT_RULES, true),
-    slot("proportional_tiers", SHOT_SPLIT_PROPORTIONAL_TIERS_TEMPLATE, true),
-    slot("camera_directions", SHOT_SPLIT_CAMERA_DIRECTIONS, true),
+    slot("role_definition", SHOT_SPLIT_ROLE_DEFINITION, true, SHOT_SPLIT_ROLE_DEFINITION_EN),
+    slot("script_fidelity", SHOT_SPLIT_FIDELITY_RULES, true, SHOT_SPLIT_FIDELITY_RULES_EN),
+    slot("output_format", SHOT_SPLIT_OUTPUT_FORMAT_TEMPLATE, false, SHOT_SPLIT_OUTPUT_FORMAT_EN),
+    slot("start_end_frame_rules", SHOT_SPLIT_START_END_FRAME_RULES, true, SHOT_SPLIT_START_END_FRAME_RULES_EN),
+    slot("motion_script_rules", SHOT_SPLIT_MOTION_SCRIPT_RULES, true, SHOT_SPLIT_MOTION_SCRIPT_RULES_EN),
+    slot("video_script_rules", SHOT_SPLIT_VIDEO_SCRIPT_RULES, true, SHOT_SPLIT_VIDEO_SCRIPT_RULES_EN),
+    slot("proportional_tiers", SHOT_SPLIT_PROPORTIONAL_TIERS_TEMPLATE, true, SHOT_SPLIT_PROPORTIONAL_TIERS_EN),
+    slot("camera_directions", SHOT_SPLIT_CAMERA_DIRECTIONS, true, SHOT_SPLIT_CAMERA_DIRECTIONS_EN),
     slot(
       "cinematography_principles",
       SHOT_SPLIT_CINEMATOGRAPHY_PRINCIPLES_TEMPLATE,
-      true
+      true,
+      SHOT_SPLIT_CINEMATOGRAPHY_PRINCIPLES_EN
     ),
-    slot("language_rules", SHOT_SPLIT_LANGUAGE_RULES, false),
-    slot("voice_constraint", SHOT_SPLIT_VOICE_CONSTRAINT, true),
+    slot("language_rules", SHOT_SPLIT_LANGUAGE_RULES, false, SHOT_SPLIT_LANGUAGE_RULES_EN),
+    slot("voice_constraint", SHOT_SPLIT_VOICE_CONSTRAINT, true, SHOT_SPLIT_VOICE_CONSTRAINT_EN),
   ],
   buildFullPrompt(sc, params) {
     const s = this.slots;
@@ -2060,15 +2342,57 @@ const SHOT_KEYFRAME_ASSETS_OUTPUT_FORMAT = `输出 JSON 数组，每个镜头一
 - **数组顺序必须等于 [subject] 标签中角色的描述顺序**（Picture N 按数组 index 分配，顺序错会导致参考图对调）
 - 空数组 [] 是合法的（纯环境镜头）；`
 
+const SHOT_KEYFRAME_ASSETS_ROLE_EN = `You are a senior cinematographer and storyboard artist. Given a set of already-split shot metadata (each shot has sceneDescription / motionScript / videoScript / dialogues / characters / cameraDirection), your task is to generate the image-generation prompts for each shot's **first frame (startFrame)** and **last frame (endFrame)**.
+First/last-frame purpose: the video generator uses the first frame as the starting image and the last frame as the ending image, and interpolates the in-between motion. So both frames must:
+1. Describe two stable moments of that shot — first frame = the instant before the action begins, last frame = the instant after it completes
+2. Share the same scene environment (lighting, colour temperature, location must be identical)
+3. Bridge via the action described in motionScript
+4. No motion-blur state — the last frame must serve as the next shot's starting reference.`;
+const SHOT_KEYFRAME_ASSETS_RULES_EN = `${physicsRealismBlock()}
+
+${buildStyleMappingBlock()}
+
+═══════════════════════════
+[Forbidden items — any violation makes the frame a fail]
+═══════════════════════════
+Violating any one → the frame must be regenerated:
+1. Character costume/build/hair/skin — the reference image already anchors all appearance; repeating it in text causes T2I signal conflict
+   Forbidden: "wearing a coarse-brown short robe" / "sumptuous brocade robe" / "powerful build"
+   Allowed: baseName + transient state (pose/expression/gaze/hand position/temporary prop)
+2. Parenthetical notes — no "(costume unchanged: ...)" annotations
+3. "feet shoulder-width" — default standing pose, no information gain (exception: special stances like a horse-stance or lunge)
+4. "high contrast" / "extreme contrast" / "soft contrast" — see the [lighting] vocabulary
+5. Repeated body-part/pose descriptions within [subject] — describe each part only once
+[Character-consistency anchoring]
+- Write only baseName (e.g. "朱元璋", "刘德"), never append the visualHint parentheses — baseName is unique within an EP`;
+const SHOT_KEYFRAME_ASSETS_OUTPUT_FORMAT_EN = `Output a JSON array, one object per shot. **The prompts array must have exactly 2 elements: index 0 = first frame, index 1 = last frame**.
+[first/last frame character separation]: firstFrameCharacters and lastFrameCharacters must list the characters actually visible in each frame separately.
+[
+  {
+    "shotSequence": 1,
+    "firstFrameCharacters": ["char in first frame"],
+    "lastFrameCharacters": ["char in last frame"],
+    "prompts": ["first-frame structured tags", "last-frame structured tags"]
+  }
+]
+Output only valid JSON — no markdown fences, no preamble.
+[Character determination rules]
+- List only characters visually present in that frame (plain baseName, no visualHint)
+- A character in only one frame goes only in that frame's array
+- Narration / off-screen voice characters are not listed
+- Max 3 characters per frame (ComfyUI reference-image slot limit); if more, pick the 3 most important
+- Array order must equal the order of characters in the [subject] tags (Picture N assigned by array index)
+- An empty array [] is valid (pure-environment shot).`;
+
 const shotKeyframeAssetsDef: PromptDefinition = {
   key: "shot_split_keyframe_assets",
   nameKey: "promptTemplates.prompts.shotSplitKeyframeAssets",
   descriptionKey: "promptTemplates.prompts.shotSplitKeyframeAssetsDesc",
   category: "shot",
   slots: [
-    slot("role_definition", SHOT_KEYFRAME_ASSETS_ROLE, true),
-    slot("rules", SHOT_KEYFRAME_ASSETS_RULES, true),
-    slot("output_format", SHOT_KEYFRAME_ASSETS_OUTPUT_FORMAT, false),
+    slot("role_definition", SHOT_KEYFRAME_ASSETS_ROLE, true, SHOT_KEYFRAME_ASSETS_ROLE_EN),
+    slot("rules", SHOT_KEYFRAME_ASSETS_RULES, true, SHOT_KEYFRAME_ASSETS_RULES_EN),
+    slot("output_format", SHOT_KEYFRAME_ASSETS_OUTPUT_FORMAT, false, SHOT_KEYFRAME_ASSETS_OUTPUT_FORMAT_EN),
   ],
   buildFullPrompt(sc) {
     const s = this.slots;
@@ -2169,16 +2493,49 @@ const FIRST_FRAME_CONTINUITY_RULES = `=== 连续性要求 ===
 - 环境光线和色温应平滑过渡
 - 角色位置应从上一个镜头结束时的位置逻辑延续`;
 
+const FIRST_FRAME_STYLE_MATCHING_EN = `=== Key: art-style matching (top priority) ===
+Carefully read the character descriptions and scene description below. They specify or imply an art style.
+You must match that style exactly. Do not default to a realistic style.
+- If a reference image is attached, its visual style is ground truth — match it exactly
+- The output style must stay consistent with the character reference sheet
+
+${buildStyleMappingBlock()}
+
+${artStyleBlock()}
+
+${physicsRealismBlock()}`;
+const FIRST_FRAME_REFERENCE_RULES_EN = `=== Reference images (character sheet) ===
+Each attached reference image is a character reference sheet showing 4 views (front, three-quarter, side, back).
+The character's name is printed at the bottom of each sheet — use it to match the character in the scene description.
+Mandatory consistency rules:
+- Match the name on the sheet to the character name in the scene description
+- Costume must exactly match the reference — same garment type, colour, material, accessories. Do not substitute (e.g. do not swap a cyan robe for a dragon robe)
+- Face, hair, hair colour, build, skin tone must match exactly
+- Every accessory shown in the reference (hat, sheathed blade, hairpin, jewellery) must appear
+- The art style must exactly match the reference images`;
+const FIRST_FRAME_RENDERING_QUALITY_EN = `=== Rendering ===
+Material: rich detail befitting the art style
+Lighting: motivated cinematic lighting. Use a rim light to separate the character.
+Background: fully-rendered detailed environment. No blank or abstract backgrounds.
+Character: match the reference images' appearance and style exactly. Lively expression, natural dynamic pose.
+Composition: cinematic framing with a clear focal point and depth of field.`;
+const FIRST_FRAME_CONTINUITY_RULES_EN = `=== Continuity requirements ===
+This shot follows the previous shot. The attached reference includes the previous shot's last frame. Maintain visual continuity:
+- The same characters must wear consistent costumes and proportions
+- Same art style — do not switch between anime and realistic
+- Environment lighting and colour temperature should transition smoothly
+- Character positions must logically continue from where the previous shot ended`;
+
 const frameGenerateFirstDef: PromptDefinition = {
   key: "frame_generate_first",
   nameKey: "promptTemplates.prompts.frameGenerateFirst",
   descriptionKey: "promptTemplates.prompts.frameGenerateFirstDesc",
   category: "frame",
   slots: [
-    slot("style_matching", FIRST_FRAME_STYLE_MATCHING, true),
-    slot("reference_rules", FIRST_FRAME_REFERENCE_RULES, true),
-    slot("rendering_quality", FIRST_FRAME_RENDERING_QUALITY, true),
-    slot("continuity_rules", FIRST_FRAME_CONTINUITY_RULES, true),
+    slot("style_matching", FIRST_FRAME_STYLE_MATCHING, true, FIRST_FRAME_STYLE_MATCHING_EN),
+    slot("reference_rules", FIRST_FRAME_REFERENCE_RULES, true, FIRST_FRAME_REFERENCE_RULES_EN),
+    slot("rendering_quality", FIRST_FRAME_RENDERING_QUALITY, true, FIRST_FRAME_RENDERING_QUALITY_EN),
+    slot("continuity_rules", FIRST_FRAME_CONTINUITY_RULES, true, FIRST_FRAME_CONTINUITY_RULES_EN),
   ],
   buildFullPrompt(sc, params) {
     const s = this.slots;
@@ -2239,16 +2596,40 @@ const LAST_FRAME_RENDERING_QUALITY = `=== 渲染 ===
 角色：精确匹配参考图。展示镜头动作结束时的情感状态。
 构图：镜头的自然收束，为下一个剪辑做好准备。`;
 
+const LAST_FRAME_STYLE_MATCHING_EN = `=== Key: art-style matching (top priority) ===
+You must exactly match the art style of the first-frame image (already attached).
+- If the first frame is anime/comic style → this frame must also be anime/comic
+- If the first frame is realistic → this frame must also be realistic
+- Do not change or mix art styles. This is non-negotiable.`;
+const LAST_FRAME_RELATIONSHIP_TO_FIRST_EN = `=== Relationship to the first frame ===
+This last frame shows the end state of the shot's action. Compared with the first frame:
+- Same environment, lighting setup, and colour scheme
+- Art style absolutely identical — no changes allowed
+- Costumes exactly the same as the reference sheets and the first frame. No costume changes.
+- Same face, hairstyle, accessories — only pose/expression/position change
+- The character's position, pose, and expression have changed as described in the frame description`;
+const LAST_FRAME_NEXT_SHOT_READINESS_EN = `=== As the next shot's starting point ===
+This frame will be reused as the next shot's first frame. Ensure:
+- The pose is stable — not mid-motion or blurred
+- The composition is complete and stands as an independent frame
+- The framing allows a natural transition to a different camera angle`;
+const LAST_FRAME_RENDERING_QUALITY_EN = `=== Rendering ===
+Material: rich detail matching the first frame's style
+Lighting: same lighting setup as the first frame; change only where the action demands it
+Background: must match the first frame's environment
+Character: match the reference images exactly; show the emotional state at the action's end
+Composition: natural resolution of the shot, ready for the next cut`;
+
 const frameGenerateLastDef: PromptDefinition = {
   key: "frame_generate_last",
   nameKey: "promptTemplates.prompts.frameGenerateLast",
   descriptionKey: "promptTemplates.prompts.frameGenerateLastDesc",
   category: "frame",
   slots: [
-    slot("style_matching", LAST_FRAME_STYLE_MATCHING, true),
-    slot("relationship_to_first", LAST_FRAME_RELATIONSHIP_TO_FIRST, true),
-    slot("next_shot_readiness", LAST_FRAME_NEXT_SHOT_READINESS, true),
-    slot("rendering_quality", LAST_FRAME_RENDERING_QUALITY, true),
+    slot("style_matching", LAST_FRAME_STYLE_MATCHING, true, LAST_FRAME_STYLE_MATCHING_EN),
+    slot("relationship_to_first", LAST_FRAME_RELATIONSHIP_TO_FIRST, true, LAST_FRAME_RELATIONSHIP_TO_FIRST_EN),
+    slot("next_shot_readiness", LAST_FRAME_NEXT_SHOT_READINESS, true, LAST_FRAME_NEXT_SHOT_READINESS_EN),
+    slot("rendering_quality", LAST_FRAME_RENDERING_QUALITY, true, LAST_FRAME_RENDERING_QUALITY_EN),
   ],
   buildFullPrompt(sc, params) {
     const s = this.slots;
@@ -2306,15 +2687,35 @@ const SCENE_FRAME_RENDERING = `=== 渲染质量 ===
 - 画风：遵循场景描述中的风格指示
 - 再次强调：画面中不出现任何人物`;
 
+const SCENE_FRAME_REFERENCE_RULES_EN = `=== No-people hard constraint (top priority) ===
+This is a pure scene reference frame. The frame must NOT contain any person, character, back-view, silhouette, human shape, hands/feet, or body part.
+- Forbidden: people, characters, back-views, silhouettes, human-shape outlines, exposed hands/feet/shoulders
+- Allowed: empty environment, architecture, props, natural scenery, weather, light, atmospheric particles
+- Character consistency is guaranteed by the multi-reference mechanism at the downstream video-generation stage; it is fully decoupled from this step
+
+${buildStyleMappingBlock()}
+
+${physicsRealismBlock()}`;
+const SCENE_FRAME_COMPOSITION_RULES_EN = `=== Composition rules ===
+- Render the concrete spatial composition from the scene description — do not default to a generic shot
+- Fully-rendered background and environment — no blank or abstract backgrounds
+- Cinematic framing with clear composition and depth of field
+- The composition must leave room for characters to enter later, but no person appears in this frame`;
+const SCENE_FRAME_RENDERING_EN = `=== Rendering quality ===
+- Material: rich detail befitting the art style
+- Lighting: cinematic lighting with a clear light-source motivation
+- Art style: follow the style direction in the scene description
+- Reminder: no person appears in the frame`;
+
 const sceneFrameGenerateDef: PromptDefinition = {
   key: "scene_frame_generate",
   nameKey: "promptTemplates.prompts.sceneFrameGenerate",
   descriptionKey: "promptTemplates.prompts.sceneFrameGenerateDesc",
   category: "frame",
   slots: [
-    slot("reference_rules", SCENE_FRAME_REFERENCE_RULES, true),
-    slot("composition_rules", SCENE_FRAME_COMPOSITION_RULES, true),
-    slot("rendering", SCENE_FRAME_RENDERING, true),
+    slot("reference_rules", SCENE_FRAME_REFERENCE_RULES, true, SCENE_FRAME_REFERENCE_RULES_EN),
+    slot("composition_rules", SCENE_FRAME_COMPOSITION_RULES, true, SCENE_FRAME_COMPOSITION_RULES_EN),
+    slot("rendering", SCENE_FRAME_RENDERING, true, SCENE_FRAME_RENDERING_EN),
   ],
   buildFullPrompt(sc, params) {
     const s = this.slots;
@@ -2392,15 +2793,47 @@ const VIDEO_FRAME_ANCHORS = `[帧锚点]
 首帧：{{START_FRAME_DESC}}
 尾帧：{{END_FRAME_DESC}}`;
 
+const VIDEO_INTERPOLATION_HEADER_EN = `In natural prose (English), describe the dynamic process between the first and last frame. No structured tags ("Scene:" / "Action:"), no weighting syntax ("(xx: 1.5)"). Write the shot as a cinematic sequence, in language that lets the model "see" it.
+
+Writing points (MiniMax H3 style):
+- Subject motion: concrete body movement — gripping, leaning, turning, raising a hand, slowing steps, a held breath; specify speed and force.
+- Environment reaction: how the world responds — a hem fluttering, leaves scattering, light patches sweeping the wall, ripples spreading on water.
+- Camera movement: use specific terms — "slow push-in" / "low-angle wide tilt-up" / "orbital pan fast cut" / "locked-off" / "Vertigo zoom"; avoid empty adverbs like "elegant" / "softly".
+- Physics & atmosphere: material detail, light colour-temperature, sound cues (footsteps, fabric rustle, breath, ambient), so the model feels "present".
+
+Duration strategy:
+- 4–8s: one core action, no timestamps.
+- 9–12s: 2–3 timestamped segments, e.g. "0-4s: … 5-8s: … 9-12s: …"
+- 13–15s: mandatory 3–4 timestamped segments, each a dense long sentence weaving subject / environment / camera / physics.
+
+Composition safe area (caption reservation):
+The bottom 20% of the frame is the caption zone; keep faces and key actions in the upper 2/3. For close-ups keep the face centred and high; for full-body shots feet may reach the bottom but the action zone stays up top. Add a composition cue like "character placed in the upper-centre of the frame".
+
+End-of-prompt forbidden items (write as the last line):
+No watermark, subtitles, text logos, badges, timecode, or frame borders.`;
+const VIDEO_DIALOGUE_FORMAT_EN = `Dialogue format (each line standalone, placed after the visual description):
+- On-screen dialogue: [Lip-sync] CharacterName (visual tag, emotion): "exact line"
+- Off-screen narration: [VO] CharacterName (emotion): "exact line"
+
+The emotion tag is key — it lets the model align lip-sync, breathing rhythm, and the line. Examples:
+- [Lip-sync] Su Wan (red dress, black hair, cold counter-attack): "Mr. Gu, you once said I wasn't even worth lacing your shoes."
+- [VO] Narrator (low, hoarse): "That night, the city was colder than the rain."
+
+Sound effects on their own line, prefixed "SFX:", separate from the visual description.
+Example: SFX: the crisp tear of a contract being shredded, guests' hushed whispers, low background strings in the distance.`;
+const VIDEO_FRAME_ANCHORS_EN = `[Frame anchors]
+First frame: {{START_FRAME_DESC}}
+Last frame: {{END_FRAME_DESC}}`;
+
 const videoGenerateDef: PromptDefinition = {
   key: "video_generate",
   nameKey: "promptTemplates.prompts.videoGenerate",
   descriptionKey: "promptTemplates.prompts.videoGenerateDesc",
   category: "video",
   slots: [
-    slot("interpolation_header", VIDEO_INTERPOLATION_HEADER, true),
-    slot("dialogue_format", VIDEO_DIALOGUE_FORMAT, true),
-    slot("frame_anchors", VIDEO_FRAME_ANCHORS, true),
+    slot("interpolation_header", VIDEO_INTERPOLATION_HEADER, true, VIDEO_INTERPOLATION_HEADER_EN),
+    slot("dialogue_format", VIDEO_DIALOGUE_FORMAT, true, VIDEO_DIALOGUE_FORMAT_EN),
+    slot("frame_anchors", VIDEO_FRAME_ANCHORS, true, VIDEO_FRAME_ANCHORS_EN),
   ],
   buildFullPrompt(sc) {
     const s = this.slots;
@@ -2436,15 +2869,30 @@ const REF_VIDEO_DURATION_STRATEGY = `=== 时长策略（Seedance 2.0）===
 
 镜头运动必须使用具体词："缓慢推近" / "环绕摇镜快切" / "希区柯克变焦" / "低角度广角上摇" / "定格慢放" / "固定机位"，禁止"优雅地""柔和地"这类空修饰。`;
 
+const REF_VIDEO_CONSISTENCY_RULES_EN = `=== Reference-image consistency constraints (the lifeline of reference-image mode) ===
+When generating the video, the attached reference images are the **authoritative visual references**, not optional suggestions. Enforce strictly:
+- **No changing a character's appearance**: costume colour, cut, accessories, hairstyle, hair colour, face shape and build must exactly match the reference image. No "costume swap" mid-video.
+- **No changing the environment style**: background tone, material, architectural style, and light基调 must match the reference.
+- **Only dynamics may change**: character pose, expression, body action, camera movement, and the environment's dynamic response (fluttering, scattering, lifting, etc.).
+- **Multi-character scenes**: each character strictly maps to its own reference image; no identity mismatches.
+- **Art style is locked**: the reference image's style is the video's style — do not "upgrade" or restylise it.`;
+const REF_VIDEO_DURATION_STRATEGY_EN = `=== Duration strategy (Seedance 2.0) ===
+Choose description granularity by shot duration:
+- 4-8s: one core action + one camera move + one atmosphere detail, a single 30-60-word prose paragraph.
+- 9-12s: 2-3 timestamped segments ("0-4s: … 5-8s: …"), 60-120 words.
+- 13-15s: 3-4 timestamped segments ("0-3s / 4-8s / 9-12s / 13-15s"), 120-200 words, each segment weaving the four layers: character action / environment reaction / camera movement / physical SFX.
+
+Camera movement must use concrete terms: "slow push-in" / "orbital pan fast cut" / "Vertigo zoom" / "low-angle wide tilt-up" / "freeze-frame slow motion" / "locked-off"; avoid empty adverbs like "elegant" / "softly".`;
+
 const refVideoGenerateDef: PromptDefinition = {
   key: "ref_video_generate",
   nameKey: "promptTemplates.prompts.refVideoGenerate",
   descriptionKey: "promptTemplates.prompts.refVideoGenerateDesc",
   category: "video",
   slots: [
-    slot("consistency_rules", REF_VIDEO_CONSISTENCY_RULES, true),
-    slot("duration_strategy", REF_VIDEO_DURATION_STRATEGY, true),
-    slot("dialogue_format", REF_VIDEO_DIALOGUE_FORMAT, true),
+    slot("consistency_rules", REF_VIDEO_CONSISTENCY_RULES, true, REF_VIDEO_CONSISTENCY_RULES_EN),
+    slot("duration_strategy", REF_VIDEO_DURATION_STRATEGY, true, REF_VIDEO_DURATION_STRATEGY_EN),
+    slot("dialogue_format", REF_VIDEO_DIALOGUE_FORMAT, true, VIDEO_DIALOGUE_FORMAT_EN),
   ],
   buildFullPrompt(sc) {
     const s = this.slots;
@@ -2586,16 +3034,114 @@ const REF_VIDEO_PROMPT_QUALITY_BENCHMARK = `## 官方标杆示例
 // Use shared language rule block with a prompt-specific addendum
 const REF_VIDEO_PROMPT_LANGUAGE_RULES = `${languageRuleBlock()}\nOutput the prompt only, no preamble.`;
 
+const REF_VIDEO_PROMPT_ROLE_DEFINITION_EN = `You are a video-prompt-writing expert, compatible with video-generation models such as H3 / Seedance. You will receive an **ordered** set of reference images and write the prompt from them:
+- The first N images are character references (each bound to a character name)
+- The last M images are scene references (pure environment, no people, arranged in chronological order)
+
+The "script action" you receive contains a precise second-level timeline — the most important input for the output prompt; you must break the timeline into a continuous action chain.
+
+**H3 camera-movement terminology (prefer these terms)**:
+  Dolly-in / Dolly-out = push-in / pull-out | Truck = lateral tracking | Pan = left/right pan
+  Handheld = handheld tracking | Crane = up/down | Slither = slider lateral move
+  Static = locked-off | Dolly Zoom = Vertigo zoom`;
+const REF_VIDEO_PROMPT_MOTION_RULES_EN = `## Core syntax (MiniMax H3 @-reference format)
+
+1. **Every character and scene must be referenced via \`@Image N\`**. The order must strictly match the reference-image order — the first N are characters, the last M are scenes.
+
+2. **Writing style: smooth, flowing natural prose.**
+   - Embed \`@Image N\` directly into the prose description
+   - **Do not** write a standalone "Image mapping: @Image 1 = X, @Image 2 = Y" line — melt the information into the prose
+   - **Every** @Image N occurrence must be followed by the character name, written as "@Image 1 (Li Mubai)"
+   - **Do not** use structured labels like "Beat 1 / Beat 2 / Beat 3"
+
+3. **Dialogue format**: embed directly in the prose, starting with "CharacterName line:", e.g.:
+   > Blogger line: Found my holy-face cream!
+   **Do not** use the structured "[Lip-sync] @Image N (name): 'line'" tag.
+
+4. **Sound effects**: weave into the prose (e.g. "accompanied by a crisp sword-ring"), no separate SFX line.
+
+## Action-rhythm planning (core!)
+**Every second must have a visual change** — no shot may have only one action; even a close-up must be split into a continuous micro-action chain.
+
+Rhythm formula: **place one action beat every 2-3s**, linking beats with transitional actions.
+
+| Duration | Beats | Words | Note |
+|------|--------|------|------|
+| 4-5s | 2 | 40-70 | |
+| 6-8s | 3 | 60-100 |
+| 9-12s | 4-5 | 100-160 |
+| 13-15s | 5-6 | 150-220 | a full mini narrative arc with emotional rise/fall |
+
+**Timeline-preservation rule**: if the input "script action" contains second-level markers ("0-3s / 4-6s / 7-9s"), you **must** preserve those second-segments in the output prose; link each second-segment (one in-shot action) with temporal words "first… then… next…"; cover every second-segment without dropping any stage.
+
+## Composition safe area (caption reservation)
+The **bottom 20%** of the frame is the caption zone and must stay clean — never place a face, key action, or important prop in the bottom 1/5 region.
+- Faces and upper bodies go in the upper 60% of the frame
+- Close-up: face centred and high, leaving room below the chin
+- Full-body: feet may reach the bottom, but the key performance zone (face, hand actions) stays in the upper 2/3
+- Guide the prompt with composition cues, e.g. "character placed in the upper-centre", "face in the upper half", "leave caption space at the bottom"
+- No text, watermark, subtitles, or logo
+
+## Other rules
+- Language follows the script: Chinese script → Chinese prompt; English → English.
+- Do not write into the prompt any character/scene not passed to you.
+- The frame must not be only a scene description with the character completely still.
+- Output only the prompt body — no preamble, no markdown.`;
+const REF_VIDEO_PROMPT_QUALITY_BENCHMARK_EN = `## Official benchmark examples
+
+[Example 1 — beauty-product showcase (Jimeng official style)]
+Input:
+  Image 1 = beauty blogger (character)
+  Image 2 = face cream (product prop)
+  Script: blogger introduces the cream product
+  Camera: close-up
+
+Output:
+@Image 1 (beauty blogger) introduces in a bright, elegant makeup (remove facial glare), a sweet smile, close-up shot, handheld @Image 2 (face cream) toward camera, clean minimal background, fresh sweet style. Blogger line: Found my holy-face cream! The texture is as soft and glutinous as a cloud, absorbs in one sweep, fixes all-nighter damage, hydrates and moisturises — even bare skin glows.
+
+[Example 2 — xianxia duel (multi-scene, 10s)]
+Input:
+  Image 1 = Li Mubai (character)
+  Image 2 = Yu Jiaolong (character)
+  Image 3 = bamboo grove (scene)
+  Image 4 = bamboo-tops high in the sky (scene)
+  Script action: Li Mubai chases Yu Jiaolong; the two leap from the ground up onto the bamboo tops to duel
+  Camera: low-angle upward tracking
+  Duration: 10s
+
+Output:
+Low-angle upward tracking follows @Image 1 (Li Mubai) crouching to gather force on the ground of @Image 3 (bamboo grove) for half a second, then springing off the ground into the air, the camera tilts up in sync through the bamboo trunks. The frame cuts to @Image 4 (bamboo-tops high in the sky), @Image 2 (Yu Jiaolong) slashes in from the left with a blue sword, @Image 1 (Li Mubai) twists to parry with fingertips; the two face off briefly atop the bamboo, jade-green leaves scattered by the sword-qi. Li Mubai line: The jianghu road is long — why cling to this?
+
+[Example 3 — close-up (single person, 8s, showing correct rhythm)]
+Input:
+  Image 1 = the Fiancée (character)
+  Image 2 = metal tabletop (scene)
+  Script action: the heiress waits at the table, showing impatience
+  Camera: fixed close-up
+  Duration: 8s
+
+Output:
+In a fixed close-up, the index finger of @Image 1 (the Fiancée), clad in black nail polish, slowly drags across the scratched surface of @Image 2 (metal tabletop), fingertips kicking up a wisp of dust. Then the index and middle fingers of @Image 1 (the Fiancée) tap the cold tabletop in alternation, the tempo quickening, each tap raising fine dust that floats in the overhead light. On the fourth tap the finger halts, five fingers slowly close into a fist, knuckles whitening, the black nail plates pressing into the palm.
+
+## Negative examples (forbidden)
+❌ "His finger emits a warm glow, the piece falling elegantly" — no @Image mapping, empty adverbs
+❌ "Li Mubai leaps up" — a name written directly, no @Image binding
+❌ "Image 1 walks down the steps" — missing the @ prefix, must be written @Image 1
+❌ "@Image 1 twists to parry" — missing the character name, must be written @Image 1 (Li Mubai)
+❌ "Image mapping: @Image 1 is Li Mubai, @Image 2 is Yu Jiaolong. Beat 1: Li Mubai gathers force…" — no standalone mapping line or beat labels
+❌ "[Lip-sync] @Image 1 (Li Mubai): 'The jianghu road is long'" — no structured dialogue tags; use "Li Mubai line: The jianghu road is long"`;
+const REF_VIDEO_PROMPT_LANGUAGE_RULES_EN = `Write the prompt in the same language as the script. Output only the prompt body — no preamble, no markdown.`;
+
 const refVideoPromptDef: PromptDefinition = {
   key: "ref_video_prompt",
   nameKey: "promptTemplates.prompts.refVideoPrompt",
   descriptionKey: "promptTemplates.prompts.refVideoPromptDesc",
   category: "video",
   slots: [
-    slot("role_definition", REF_VIDEO_PROMPT_ROLE_DEFINITION, true),
-    slot("motion_rules", REF_VIDEO_PROMPT_MOTION_RULES, true),
-    slot("quality_benchmark", REF_VIDEO_PROMPT_QUALITY_BENCHMARK, true),
-    slot("language_rules", REF_VIDEO_PROMPT_LANGUAGE_RULES, false),
+    slot("role_definition", REF_VIDEO_PROMPT_ROLE_DEFINITION, true, REF_VIDEO_PROMPT_ROLE_DEFINITION_EN),
+    slot("motion_rules", REF_VIDEO_PROMPT_MOTION_RULES, true, REF_VIDEO_PROMPT_MOTION_RULES_EN),
+    slot("quality_benchmark", REF_VIDEO_PROMPT_QUALITY_BENCHMARK, true, REF_VIDEO_PROMPT_QUALITY_BENCHMARK_EN),
+    slot("language_rules", REF_VIDEO_PROMPT_LANGUAGE_RULES, false, REF_VIDEO_PROMPT_LANGUAGE_RULES_EN),
   ],
   buildFullPrompt(sc) {
     const s = this.slots;
@@ -2752,17 +3298,91 @@ const FL2V_GUIDE_PRINCIPLES = `## 关键原则
 const FL2V_GUIDE_OUTPUT = `## 输出
 仅输出 H3 格式内容。无前言、无 markdown、无注释。`;
 
+const FL2V_GUIDE_ROLE_EN = `## Role
+You are the director / screenwriter.
+
+Your crew has already shot the first and last frames (<Picture 1> = opening, <Picture 2> = ending).
+Now you write the director's notes for the scene in between — camera, performance, sound —
+for the MiniMax H3 FL2VA engine to execute. The engine faithfully realises the transition between the two frames;
+the precision of its control depends on how specific your description is.`;
+const FL2V_GUIDE_TASK_EN = `## Task
+Your job is to describe the "transition". Write what happens between the two frames.
+
+The first and last frames have already fixed the character's appearance, the full scene, the light direction and colour tone.
+Do not repeat these in your description — the images are more accurate than you. What you write is what the images do NOT show:
+
+- How does the camera push / pull / pan / truck to travel from the first frame to the last in a few seconds?
+- What happens to the character's body? From which pose to which pose? How much force? How fast?
+- Does the light change? Because time passes, or the scene goes indoors / a cloud blocks it. Write only if it changes; otherwise stay silent.
+- What sound does this scene need? If a character speaks, write the line; if narration is needed, write narration;
+  for an atmosphere shot, let wind and footsteps fill it — don't force words in.
+
+In one line: what the frame already shows, you omit. What the frame does not show, you create.`;
+const FL2V_GUIDE_PROCESS_EN = `## Process
+
+First, look at the two frames.
+  Where is the character in the first frame? What pose? What emotion? And in the last frame?
+  The "gap" between these two frames is your room to work.
+  The bigger the gap, the more the camera and performance must be considered. A small gap can be carried by micro-expressions and detail.
+
+Then, think about the scene's function.
+  What is its role in the whole story? Open with atmosphere? Advance conflict? Resolve emotion?
+  This function dictates rhythm and force — opening steady, conflict intense, resolution gentle.
+
+Next, assign speaker IDs.
+  Not every character speaks. Only assign IDs (S1/S2/...) to those who actually make a sound.
+  If the narration is just atmosphere commentary, Narrator (S0) is enough.
+
+Then, write camera and performance.
+  Write it in time segments, each with a clear primary/secondary: the camera guides the audience's attention → the character performance advances the story.
+  The opening line of each time segment should describe the camera move, then unfold the character's specific performance.
+
+Finally, decide the sound.
+  If there are lines, polish them into the matching performance segment, no narration added.
+  No lines but the scene needs narrative commentary — write narration.
+  No lines and it's atmosphere/action/transition — ambient sound is enough. Good shots speak through the picture.
+  Add off-screen voice or inner monologue where appropriate — a good director knows when sound is needed.`;
+const FL2V_GUIDE_PRINCIPLES_EN = `## Key principles
+
+1. Visual first.
+   FL2V's core ability is the visual interpolation between the two frames.
+   Camera work is your main weapon; character performance is your ammunition.
+   Don't explain with sound what the picture already expresses.
+
+2. Action is language.
+   "He grips the rope, knuckles whitening, Adam's apple working" > "He is nervous".
+   "She folds the letter in three, fingertips pausing on the wax seal" > "She makes up her mind".
+   Find a physical counterpart for every emotion. Can't find one? Keep looking.
+
+3. Sound narration.
+   Dialogue is characters speaking; narration is the story breathing. At least one line (dialogue or narration) every 3-5s — the zero-silence rule.
+   A rare silent moment has impact (held breath, shock), but most of the time,
+   ambient sound + action SFX + voices interweave — not silence.
+   Dialogue carries narrative forward; narration carries atmosphere and inner world.
+
+4. Dialogue has bones.
+   If you're given lines, the scene needs words.
+   You can polish — adjust the rhythm, strengthen the force — but don't replace the soul of the line.
+   Changing "You came" to "You finally came" is polish; changing it to "I waited ten years for you" is a rewrite.
+
+5. Cause and effect must be logical.
+   The three-step causality "left foot steps out → body leans forward → fist slams the table"
+   is executed more stably by the engine than the one-shot "he walks to the table and slams a fist".
+   Events happen in sequence; write them in sequence.`;
+const FL2V_GUIDE_OUTPUT_EN = `## Output
+Output H3-format content only. No preamble, no markdown, no comments.`;
+
 const fl2vGuideDef: PromptDefinition = {
   key: "video_h3_fl2v_guide",
   nameKey: "promptTemplates.prompts.videoH3Fl2vGuide",
   descriptionKey: "promptTemplates.prompts.videoH3Fl2vGuideDesc",
   category: "h3",
   slots: [
-    slot("role", FL2V_GUIDE_ROLE, true),
-    slot("task", FL2V_GUIDE_TASK, true),
-    slot("process", FL2V_GUIDE_PROCESS, true),
-    slot("principles", FL2V_GUIDE_PRINCIPLES, true),
-    slot("output", FL2V_GUIDE_OUTPUT, false),
+    slot("role", FL2V_GUIDE_ROLE, true, FL2V_GUIDE_ROLE_EN),
+    slot("task", FL2V_GUIDE_TASK, true, FL2V_GUIDE_TASK_EN),
+    slot("process", FL2V_GUIDE_PROCESS, true, FL2V_GUIDE_PROCESS_EN),
+    slot("principles", FL2V_GUIDE_PRINCIPLES, true, FL2V_GUIDE_PRINCIPLES_EN),
+    slot("output", FL2V_GUIDE_OUTPUT, false, FL2V_GUIDE_OUTPUT_EN),
   ],
   buildFullPrompt(sc) {
     const s = this.slots;
@@ -2807,19 +3427,44 @@ const FL2V_CONTENT_NARRATION_HINT = `## 声音策略
   角色名 (S1) says in an off-screen voiceover: <d>[Chinese] 文本</d> while his lips remain completely closed.
   ⚠️ 内容严格基于当前镜头和剧集背景，禁止引入无关历史事件或身份。`;
 
+const FL2V_CONTENT_SCRIPT_LABEL_EN = `## Shot action (timeline from first frame to last frame)
+{{VIDEO_SCRIPT}}`;
+const FL2V_CONTENT_CHAR_LABEL_EN = `## Characters
+(These characters already appear in the first/last frames. Describe only their actions and dialogue, not their appearance.)
+Assign speaker IDs (in order of appearance: S1, S2, ...):
+{{CHARACTER_LIST}}`;
+const FL2V_CONTENT_DIALOGUE_LABEL_EN = `## Dialogue script (must appear in the video!)
+{{DIALOGUE_LIST}}`;
+const FL2V_CONTENT_FRAME_LABEL_EN = `## Frame anchors (keyframe images)
+Below are the images actually used as the first/last frame anchors. You only need to understand the characters' positions and composition — do not describe environment / light / prop details (the images already provide them).
+{{FRAME_ANCHORS}}`;
+const FL2V_CONTENT_EPISODE_LABEL_EN = `## Story & episodes
+{{EPISODE_CONTEXT}}`;
+const FL2V_CONTENT_AUDIO_LABEL_EN = `## Audio
+{{AUDIO_CONTEXT}}`;
+const FL2V_CONTENT_NARRATION_HINT_EN = `## Sound strategy
+Choose based on this scene's nature:
+
+→ Has lines — polish and embed directly; don't add extra narration. The lines are enough; more is over-explaining.
+→ No lines but narrative push is needed (historical setup / character inner conflict / key-info delivery) — use narration or inner monologue.
+→ No lines and it's atmosphere / action / transition — rely on ambient sound + camera movement. Silence is valid narration.
+
+If you need narration or inner monologue, format:
+  Narrator (S0) says in an off-screen voiceover: <d>[English] text</d> while the narrator's lips remain completely closed.`;
+
 const fl2vContentDef: PromptDefinition = {
   key: "video_h3_fl2v_content",
   nameKey: "promptTemplates.prompts.videoH3Fl2vContent",
   descriptionKey: "promptTemplates.prompts.videoH3Fl2vContentDesc",
   category: "h3",
   slots: [
-    slot("script_label", FL2V_CONTENT_SCRIPT_LABEL, false),
-    slot("character_label", FL2V_CONTENT_CHAR_LABEL, true),
-    slot("dialogue_label", FL2V_CONTENT_DIALOGUE_LABEL, false),
-    slot("frame_label", FL2V_CONTENT_FRAME_LABEL, true),
-    slot("episode_label", FL2V_CONTENT_EPISODE_LABEL, false),
-    slot("audio_label", FL2V_CONTENT_AUDIO_LABEL, false),
-    slot("narration_hint", FL2V_CONTENT_NARRATION_HINT, true),
+    slot("script_label", FL2V_CONTENT_SCRIPT_LABEL, false, FL2V_CONTENT_SCRIPT_LABEL_EN),
+    slot("character_label", FL2V_CONTENT_CHAR_LABEL, true, FL2V_CONTENT_CHAR_LABEL_EN),
+    slot("dialogue_label", FL2V_CONTENT_DIALOGUE_LABEL, false, FL2V_CONTENT_DIALOGUE_LABEL_EN),
+    slot("frame_label", FL2V_CONTENT_FRAME_LABEL, true, FL2V_CONTENT_FRAME_LABEL_EN),
+    slot("episode_label", FL2V_CONTENT_EPISODE_LABEL, false, FL2V_CONTENT_EPISODE_LABEL_EN),
+    slot("audio_label", FL2V_CONTENT_AUDIO_LABEL, false, FL2V_CONTENT_AUDIO_LABEL_EN),
+    slot("narration_hint", FL2V_CONTENT_NARRATION_HINT, true, FL2V_CONTENT_NARRATION_HINT_EN),
   ],
   buildFullPrompt(sc) {
     const s = this.slots;
@@ -2887,20 +3532,64 @@ const FL2V_CONSTRAINT_VOICE = `【声音 — 分级密度 (2026-08-20 修订, EP
 19. 如果镜头提供 Voice Context（来自 shot-split 预生成），必须在对应时间段引用，禁止修改/替换/新增。
 20. Voice Context 为空时，禁止发明角色对话、旁白或内心独白（仅允许 SFX）。`;
 
+const FL2V_CONSTRAINT_TIME_STRUCTURE_EN = `【Time structure — mandatory】
+1. Must split into {{SEGMENT_COUNT}} time segments (do not create [Shot 2]).
+2. Each time segment must have its own visual change and camera move.`;
+const FL2V_CONSTRAINT_ACTION_BEATS_EN = `【Action beats — mandatory】
+3. Place a micro-action node every 2-3s — even a static shot must add: breathing rhythm, fabric drifting, light change, water ripples, fine camera adjustment.
+4. Chain micro-actions with "first… then… next… finally…"; do not write all actions as happening simultaneously.`;
+const FL2V_CONSTRAINT_CAMERA_EN = `【Camera — top priority】
+7. The first line of each time segment must be a camera move:
+   Format: "camera [move type] [amplitude] [speed]"
+   Example: "camera slowly pushes in, small amplitude."
+   Only after writing the camera move, write the character action.
+8. The camera move must include amplitude + speed modifiers.
+9. Main camera direction: {{CAMERA_DIRECTION}}`;
+const FL2V_CONSTRAINT_DIALOGUE_EN = `【Dialogue — mandatory】
+5. Dialogue format: (S1) says: <d>[zh] original line</d>
+   Off-screen voice format (H3 official standard): CharacterName (S1) says in an off-screen voiceover: <d>[zh] text</d> while his lips remain completely closed.
+6. Dialogue must be embedded into the corresponding time segment — first describe the character action, then write the dialogue line.`;
+const FL2V_CONSTRAINT_FORMAT_EN = `【Format】
+10. Characters are already in the frames — describe only actions and movement; do not describe appearance.
+11. No markdown, code blocks, or comments — pure H3-format output.
+12. Do not copy the script verbatim — convert it into rich, film-grade prose.`;
+const FL2V_CONSTRAINT_NO_ENV_EN = `【Environment — FL2V-specific rule】
+13. The first/last frame images already provide all environment / light / props. Do not describe in the prompt:
+    - static scene elements (buildings, furniture, natural scenery)
+    - static lighting conditions (light position / colour temperature / texture)
+    - static prop detail (props, decorations, textures)
+14. Only describe environment changes: a flame flickering ✅ / clouds cover the moon and light dims ✅ /
+    bonfire dance in the ruined temple lighting the earthen wall ❌ / warm orange light at a low left angle ❌`;
+const FL2V_CONSTRAINT_BODY_VOCAB_EN = `【Body action — whitelist】
+15. Use concrete physical verbs: turn head, raise eyes, lower eyes, grip, release, raise hand, let go,
+    step forward, step back, lean in, lean back, stand up, sit, kneel, rise, turn, squint, blink.
+16. No abstract words: "falls into deep thought" → "eyelids lower, brows draw together".
+    No vague words: "expression changes" → "brows go from furrowed to relaxed".`;
+const FL2V_CONSTRAINT_VOICE_EN = `【Sound — graded density (revised 2026-08-20, EP05 diagnosis #3)】
+17. Grade voice density by shot type (not a hard per-3s embed):
+    - combat: 1-2 voice + 1 SFX; allow ≥4s of silent breathing
+    - dialogue: 2-3 voice events
+    - emotional: 1-2 voice (incl. monologue); prefer silence→sound fade-in
+    - transitional: 1 voice (narration)
+    - spectacle: 0-1 voice; lead with SFX + visual
+18. Silence is also a narrative tool — the gasps of combat, the held gaze.
+19. If the shot provides Voice Context (pre-generated by shot-split), it must be referenced in the corresponding time segment; do not modify / replace / add.
+20. When Voice Context is empty, do not invent character dialogue, narration, or inner monologue (SFX only allowed).`;
+
 const fl2vConstraintsDef: PromptDefinition = {
   key: "video_h3_fl2v_constraints",
   nameKey: "promptTemplates.prompts.videoH3Fl2vConstraints",
   descriptionKey: "promptTemplates.prompts.videoH3Fl2vConstraintsDesc",
   category: "h3",
   slots: [
-    slot("time_structure", FL2V_CONSTRAINT_TIME_STRUCTURE, true),
-    slot("action_beats", FL2V_CONSTRAINT_ACTION_BEATS, true),
-    slot("camera", FL2V_CONSTRAINT_CAMERA, true),
-    slot("dialogue", FL2V_CONSTRAINT_DIALOGUE, true),
-    slot("format", FL2V_CONSTRAINT_FORMAT, true),
-    slot("no_env", FL2V_CONSTRAINT_NO_ENV, true),
-    slot("body_vocab", FL2V_CONSTRAINT_BODY_VOCAB, true),
-    slot("voice", FL2V_CONSTRAINT_VOICE, true),
+    slot("time_structure", FL2V_CONSTRAINT_TIME_STRUCTURE, true, FL2V_CONSTRAINT_TIME_STRUCTURE_EN),
+    slot("action_beats", FL2V_CONSTRAINT_ACTION_BEATS, true, FL2V_CONSTRAINT_ACTION_BEATS_EN),
+    slot("camera", FL2V_CONSTRAINT_CAMERA, true, FL2V_CONSTRAINT_CAMERA_EN),
+    slot("dialogue", FL2V_CONSTRAINT_DIALOGUE, true, FL2V_CONSTRAINT_DIALOGUE_EN),
+    slot("format", FL2V_CONSTRAINT_FORMAT, true, FL2V_CONSTRAINT_FORMAT_EN),
+    slot("no_env", FL2V_CONSTRAINT_NO_ENV, true, FL2V_CONSTRAINT_NO_ENV_EN),
+    slot("body_vocab", FL2V_CONSTRAINT_BODY_VOCAB, true, FL2V_CONSTRAINT_BODY_VOCAB_EN),
+    slot("voice", FL2V_CONSTRAINT_VOICE, true, FL2V_CONSTRAINT_VOICE_EN),
   ],
   buildFullPrompt(sc, params?) {
     const s = this.slots;
@@ -2979,16 +3668,59 @@ const FL2V_CONTENT_NARRATION_INJECT = `## 旁白/画外音（已预生成）
 以下旁白/画外音已根据剧本和剧集背景自动生成，必须嵌入对应时间段中：
 {{NARRATION_LINES}}`;
 
+const FL2V_NARRATION_SYSTEM_EN = `You are a historical-drama narration scriptwriter. Given the context of a shot, write a narrative voice for it.
+
+Inputs:
+- Shot video script (videoScript)
+- Episode background (episode description)
+- List of appearing characters
+
+Output requirements:
+- Generate 1-3 lines of voice content
+- Type: narration (third-person narrator S0) or inner monologue (character off-screen voiceover S1/S2)
+- Narration should explain the background, advance the narrative, and reveal inner conflict
+- Inner monologue should be natural, colloquial, and fit the character's personality and current emotion
+- ⚠️ Content constraint (top priority): use strictly only the episode background and shot script provided below. Do not use your own historical knowledge or pretrained memory. A character's identity in **this shot** is defined by the episode background and shot script, not by historical facts.
+- Language: the script language (Chinese source → Chinese output; English source → English output)
+
+Output format (MiniMax H3 official standard — must strictly follow):
+  Narration:    Narrator (S0) says in an off-screen voiceover: <d>[language] text</d> while the narrator's lips remain completely closed.
+  Inner monologue: CharacterName (S1) says in an off-screen voiceover: <d>[language] text</d> while his lips remain completely closed.
+  Note: the <d> tag must include a [language] marker; each line must end with "while ... lips remain completely closed".
+
+Output only the voice line — no preamble, no explanation, no markdown.`;
+const FL2V_NARRATION_USER_TEMPLATE_EN = `## Shot video script
+{{VIDEO_SCRIPT}}
+
+## Episode background
+{{EPISODE_CONTEXT}}
+
+## Appearing characters
+{{CHARACTER_LIST}}
+
+## Requirements
+{{REQUIREMENTS}}`;
+const FL2V_NARRATION_REQUIREMENTS_EN = `- Duration: {{DURATION}}s
+- Type: narration (S0 third-person narrator) or inner monologue (character off-screen voiceover)
+- Narration explains background, advances narrative, reveals inner conflict
+- Inner monologue is natural and colloquial, fits the character's personality
+- Generate 1-3 lines
+- ⚠️ Use only the episode background and shot script provided above. Do not mention identities/events/scenes unrelated to this shot (e.g. if the shot is herding cattle, do not mention the emperor / crown prince / coronation / war)
+- Format (H3 official standard): Narrator (S0) says in an off-screen voiceover: <d>[language] text</d> while the narrator's lips remain completely closed.`;
+const FL2V_CONTENT_NARRATION_INJECT_EN = `## Narration / off-screen voice (pre-generated)
+The following narration / off-screen voice was auto-generated from the script and episode background; it must be embedded into the corresponding time segments:
+{{NARRATION_LINES}}`;
+
 const fl2vNarrationDef: PromptDefinition = {
   key: "video_h3_fl2v_narration",
   nameKey: "promptTemplates.prompts.videoH3Fl2vNarration",
   descriptionKey: "promptTemplates.prompts.videoH3Fl2vNarrationDesc",
   category: "h3",
   slots: [
-    slot("system", FL2V_NARRATION_SYSTEM, true),
-    slot("user_template", FL2V_NARRATION_USER_TEMPLATE, true),
-    slot("user_requirements", FL2V_NARRATION_REQUIREMENTS, true),
-    slot("content_inject", FL2V_CONTENT_NARRATION_INJECT, true),
+    slot("system", FL2V_NARRATION_SYSTEM, true, FL2V_NARRATION_SYSTEM_EN),
+    slot("user_template", FL2V_NARRATION_USER_TEMPLATE, true, FL2V_NARRATION_USER_TEMPLATE_EN),
+    slot("user_requirements", FL2V_NARRATION_REQUIREMENTS, true, FL2V_NARRATION_REQUIREMENTS_EN),
+    slot("content_inject", FL2V_CONTENT_NARRATION_INJECT, true, FL2V_CONTENT_NARRATION_INJECT_EN),
   ],
   buildFullPrompt(sc) {
     return resolve(sc, this.slots, "system");
@@ -3097,15 +3829,40 @@ const SCRIPT_OUTLINE_RULES = `要求：
 
 **实战节拍占比必须 ≥ 50%**。禁止把"大战"解读为"一方压制 + 另一方顿悟 + 象征性一击"的文艺套路——用户说"大战"就是要持续的双方对战序列，不是单方面的精神困境。双方都必须是主动交战者，而不是一方静立一方挣扎。`;
 
+const SCRIPT_OUTLINE_ROLE_EN = `You are an award-winning screenwriter. Based on the user's creative idea, produce a concise story outline.`;
+const SCRIPT_OUTLINE_FORMAT_EN = `Output format — a plain-text timeline. No JSON, no markdown:
+
+Premise: (one-sentence core conflict)
+
+1. [beat name] (share XX%)
+   Event: ...
+   Emotion: ...
+
+2. [beat name] (share XX%)
+   Event: ...
+   Emotion: ...
+
+3. [beat name] (share XX%)
+   Event: ...
+   Emotion: ...
+
+Climax: ...
+Resolution: ...`;
+const SCRIPT_OUTLINE_RULES_EN = `Requirements:
+- 3-5 key beats, each with an event and an emotional shift
+- Beat shares must sum to 100%
+- Language rule: use the same language as the user's input (Chinese in → Chinese out, English in → English out)
+- Output the content directly, with no wrapping or markers`;
+
 const scriptOutlineDef: PromptDefinition = {
   key: "script_outline",
   nameKey: "promptTemplates.prompts.scriptOutline",
   descriptionKey: "promptTemplates.prompts.scriptOutlineDesc",
   category: "script",
   slots: [
-    slot("role_definition", SCRIPT_OUTLINE_ROLE, true),
-    slot("output_format", SCRIPT_OUTLINE_FORMAT, true),
-    slot("writing_rules", SCRIPT_OUTLINE_RULES, true),
+    slot("role_definition", SCRIPT_OUTLINE_ROLE, true, SCRIPT_OUTLINE_ROLE_EN),
+    slot("output_format", SCRIPT_OUTLINE_FORMAT, true, SCRIPT_OUTLINE_FORMAT_EN),
+    slot("writing_rules", SCRIPT_OUTLINE_RULES, true, SCRIPT_OUTLINE_RULES_EN),
   ],
   buildFullPrompt(sc) {
     const s = this.slots;
@@ -3282,15 +4039,28 @@ const REF_IMAGE_PROMPTS_FORMAT = `仅输出有效 JSON 数组（不要 markdown�
 - 禁止使用 legacy 的 \`prompts: [string]\` 数组格式。
 - scenes 数组按时间顺序，第 0 个是起始空间。`;
 
+const REF_IMAGE_PROMPTS_ROLE_EN = `You are a professional film art director preparing **scene reference frames** for AI video generation. A scene reference frame is a pure-environment still, used as one of the multimodal reference images in the later video-generation stage, locking in the spatial layout, lighting design, colour-tone atmosphere, and camera language.
+
+Core contract:
+1. **No person may appear in the frame at all**: no people, characters, back-views, silhouettes, human-shape outlines, hands, feet, shoulders, faces, or clothes being worn. Character consistency is resolved by the multi-image reference mechanism in the video stage — fully decoupled from this step.
+2. **But do factor characters in during planning**: the story's characters determine the appropriate space size, camera height, light-source direction, and foreground prop placement for this shot (e.g. a throne ceremony needs room for the dragon throne and the dais steps; a fight needs room for movement arcs). Infer the scene shape from the characters, but don't draw them.
+3. Each scene frame must output a **scene name (name)** and **scene description (prompt)**, plus a shot-level **list of appearing characters (characters)** for the video stage to pull the matching character reference images.`;
+const REF_IMAGE_PROMPTS_RULES_EN = `Rules:
+## Definition of a scene image (most important)
+A scene image = **the physical location / environment space where the characters are**.
+- ✅ Valid: the Hall of Supreme Harmony plaza, a deep bamboo grove, a cliff edge, a ruined palace gate, inside a meditation room, a desolate plain under a blood moon, an underground cell, a pier walkway
+- ❌ Invalid: energy light effects, glowing talismans, branded patterns, close-ups of a lone weapon/prop, character portraits, costumes/accessories, abstract particles`;
+const REF_IMAGE_PROMPTS_FORMAT_EN = `Output a valid JSON array only (no markdown, no code fences, no preamble):`;
+
 const refImagePromptsDef: PromptDefinition = {
   key: "ref_image_prompts",
   nameKey: "promptTemplates.prompts.refImagePrompts",
   descriptionKey: "promptTemplates.prompts.refImagePromptsDesc",
   category: "frame",
   slots: [
-    slot("ref_image_role", REF_IMAGE_PROMPTS_ROLE, true),
-    slot("ref_image_rules", REF_IMAGE_PROMPTS_RULES, true),
-    slot("ref_image_output", REF_IMAGE_PROMPTS_FORMAT, false),
+    slot("ref_image_role", REF_IMAGE_PROMPTS_ROLE, true, REF_IMAGE_PROMPTS_ROLE_EN),
+    slot("ref_image_rules", REF_IMAGE_PROMPTS_RULES, true, REF_IMAGE_PROMPTS_RULES_EN),
+    slot("ref_image_output", REF_IMAGE_PROMPTS_FORMAT, false, REF_IMAGE_PROMPTS_FORMAT_EN),
   ],
   buildFullPrompt(sc) {
     const s = this.slots;
@@ -3333,21 +4103,41 @@ const REF_CONTENT_INNER_MONOLOGUE_HEADER = `=== 内心独白（已预生成）==
 
 const REF_CONTENT_AUDIO_HEADER = `=== 音频参考 ===`;
 
+const REF_CONTENT_ROLE_TASK_EN = `You are a professional MiniMax H3 Ref2VA video-prompt engineer.
+Given the scene frames (first / last) and character reference images, your task is to generate a complete 6-section H3 R2V video-generation prompt for the shot.`;
+const REF_CONTENT_IMAGE_MAPPING_EN = `=== Reference-image mapping ===
+Reference images are cited with <Picture N> tags. Number them strictly in the order below:`;
+const REF_CONTENT_CHARACTERS_EN = `=== Appearing characters ===`;
+const REF_CONTENT_SCENE_SHOT_EN = `=== Scene & shot breakdown ===`;
+const REF_CONTENT_MOTION_CAMERA_EN = `=== Motion script & camera ===
+Below is the shot's full motion script. You must:
+1. Segments the action beats into natural 2-3s sub-segments
+2. Mark each sub-segment with a precise start time (0.0s-3.0s: ...)
+3. Inject the matching camera-move into each sub-segment (amplitude: small / medium / large / fast)
+4. Use second values precise to one decimal place`;
+const REF_CONTENT_DIALOGUE_HEADER_EN = `=== Dialogue ===
+Dialogue uses the <d>[language] text</d> format. Use [zh] for a Chinese script, [en] for an English script.`;
+const REF_CONTENT_NARRATION_HEADER_EN = `=== Narration (pre-generated) ===
+The following narration is auto-generated from the script; it must be embedded into the corresponding time segments of detailed_description:`;
+const REF_CONTENT_INNER_MONOLOGUE_HEADER_EN = `=== Inner monologue (pre-generated) ===
+The following monologue is auto-generated from the script; it must be embedded into the corresponding time segments of detailed_description:`;
+const REF_CONTENT_AUDIO_HEADER_EN = `=== Audio reference ===`;
+
 const refContentH3Def: PromptDefinition = {
   key: "ref_video_h3_content",
   nameKey: "promptTemplates.prompts.refVideoH3Content",
   descriptionKey: "promptTemplates.prompts.refVideoH3ContentDesc",
   category: "h3",
   slots: [
-    slot("role_task", REF_CONTENT_ROLE_TASK, true),
-    slot("image_mapping", REF_CONTENT_IMAGE_MAPPING, false),
-    slot("characters", REF_CONTENT_CHARACTERS, false),
-    slot("scene_shot", REF_CONTENT_SCENE_SHOT, false),
-    slot("motion_camera", REF_CONTENT_MOTION_CAMERA, true),
-    slot("dialogue_header", REF_CONTENT_DIALOGUE_HEADER, false),
-    slot("narration_header", REF_CONTENT_NARRATION_HEADER, false),
-    slot("inner_monologue_header", REF_CONTENT_INNER_MONOLOGUE_HEADER, false),
-    slot("audio_header", REF_CONTENT_AUDIO_HEADER, false),
+    slot("role_task", REF_CONTENT_ROLE_TASK, true, REF_CONTENT_ROLE_TASK_EN),
+    slot("image_mapping", REF_CONTENT_IMAGE_MAPPING, false, REF_CONTENT_IMAGE_MAPPING_EN),
+    slot("characters", REF_CONTENT_CHARACTERS, false, REF_CONTENT_CHARACTERS_EN),
+    slot("scene_shot", REF_CONTENT_SCENE_SHOT, false, REF_CONTENT_SCENE_SHOT_EN),
+    slot("motion_camera", REF_CONTENT_MOTION_CAMERA, true, REF_CONTENT_MOTION_CAMERA_EN),
+    slot("dialogue_header", REF_CONTENT_DIALOGUE_HEADER, false, REF_CONTENT_DIALOGUE_HEADER_EN),
+    slot("narration_header", REF_CONTENT_NARRATION_HEADER, false, REF_CONTENT_NARRATION_HEADER_EN),
+    slot("inner_monologue_header", REF_CONTENT_INNER_MONOLOGUE_HEADER, false, REF_CONTENT_INNER_MONOLOGUE_HEADER_EN),
+    slot("audio_header", REF_CONTENT_AUDIO_HEADER, false, REF_CONTENT_AUDIO_HEADER_EN),
   ],
   buildFullPrompt(sc) {
     const s = this.slots;
@@ -3445,22 +4235,98 @@ R24. 禁止 markdown、代码块、注释——纯 H3 格式输出
 R25. 禁止逐字复制剧本——转换为丰富的影视级散文
 R26. 角色已在参考图中——仅描述动作和状态变化，禁止描述静态外貌`;
 
+const REF_CONSTRAINT_FORMAT_6_SECTION_EN = `【6-Section output format — top priority】
+R1. You must output all 6 sections, strictly in this order:
+    subject_definitions
+    summary
+    retention_analysis
+    detailed_description
+    overall_soundscape
+    non_diegetic_music
+R2. Section titles must be in English; content may be in the script language.`;
+const REF_CONSTRAINT_SUBJECT_CLOSURE_EN = `【Subject/Picture tag closure — Ref core rules】
+R3. Every <Subject N> defined in subject_definitions must appear in detailed_description at least once.
+R4. Every <Picture N> referenced in detailed_description must be defined in the reference-image mapping above.
+R5. <Subject N> is for reusable visual content (characters / scenes / props); <Picture N> is for composition anchors and specific frames.
+R6. Give each reference image a clear role: declare each image's function at the start of detailed_description.`;
+const REF_CONSTRAINT_ENV_REFERENCE_EN = `【Environment — cite by tag, declare function】
+R7. Scene-frame reference images provide the environment style and layout — cite them with <Picture N> tags; do not restate the image content verbatim.
+R8. Declare each scene reference image's function: "<Picture 1> provides the market layout; target lighting is cold dawn."
+R9. Describe the environment lighting and dynamic changes you want in the target video.
+    Right: "<Picture 1> provides city gate layout; cold morning mist rolls in from the right."
+    Wrong: "<Picture 1> shows a city gate with grey stone walls and wooden doors."`;
+const REF_CONSTRAINT_TIME_STRUCTURE_EN = `【Time structure — mandatory】
+R10. Split into sub-segments every 2-3s.
+R11. Each segment on its own line, format: "0.0s-3.0s: camera + character action + dialogue/narration".`;
+const REF_CONSTRAINT_CAMERA_EN = `【Camera — hard constraint (revised 2026-08-20, EP05 diagnosis #2)】
+R12-HARD: The camera move in the first time segment (0s-3s / 0s-4s) of detailed_description must exactly match {{CAMERA_DIRECTION}}.
+  Violation example: cameraDirection="static" but the first segment says "fast cut / lateral move" → violation
+  Violation example: cameraDirection="slow zoom out" but the first segment says "push in" → violation (opposite direction)
+R12b: The declared cameraDirection move must account for ≥50% of all time segments.
+  Example: in 4 segments, at least 2 use {{CAMERA_DIRECTION}}; the rest may use auxiliary moves.
+R12c-HARD: The following are hard prohibitions:
+  - cameraDirection opposite to the first segment's camera move
+  - cameraDirection="static" yet any moving camera move is used
+  - cameraDirection="tracking shot" but no tracking move appears in any time segment
+R14: Camera direction = {{CAMERA_DIRECTION}}`;
+const REF_CONSTRAINT_ACTION_DETAIL_EN = `【Action granularity — maximum detail】
+R15. detailed_description must be highly detailed — do not simplify it into a plot outline or a list of relationships.
+R16. Each time segment must fully establish: composition → subject position/appearance → environment/lighting (<Picture N> tags) → action state change → camera move → sound.
+R17. Place micro-action beats every 2-3s; chain the action sequence with "first… then… next… finally".
+R18. Each time sub-segment is 60-120 characters (about 2-3 sentences); too short = lacks detail.`;
+const REF_CONSTRAINT_BODY_VOCAB_EN = `【Body action — whitelist】
+R19. Use concrete physical verbs: turn head, raise eyes, lower eyes, grip, release, raise hand, let go, step forward, step back, lean in, lean back, stand up, sit, kneel, rise, turn, squint, blink.
+R20. No abstract descriptions.`;
+const REF_CONSTRAINT_VOICE_EN = `【Sound — graded density (revised 2026-08-20, EP05 diagnosis #3)】
+R21: Narration / monologue / dialogue must be embedded into the corresponding time segments of detailed_description.
+R22-GRADED: Grade voice density by shot type (not a hard per-3s embed):
+  - combat: 1-2 voice + 1 SFX; allow ≥4s of silent breathing
+  - dialogue: 2-3 voice events
+  - emotional: 1-2 voice (incl. monologue); prefer silence→sound fade-in
+  - transitional: 1 voice (narration)
+  - spectacle: 0-1 voice; lead with SFX + visual
+R23: Narration is a powerful narrative tool — inner voice puts the audience in the scene. Silence is also a tool — the gasps of combat, the held gaze.
+
+R27-VOICE_REF: If the shot provides Voice Context (pre-generated by shot-split), you must:
+  - Reference those sounds in the corresponding time segments of detailed_description
+  - Do not modify, replace, or add character dialogue/narration/monologue
+R28-SFX: Outside the Voice Context you may only add SFX descriptions:
+  - Weapon clashes, footstep echoes, wind — non-verbal sounds
+  - Format: [sfx]: metal clash / footstep echo / howling wind
+R29-GUIDED: When Voice Context is empty, add sound by shot type:
+  - combat → 1-2 voice (battle cry / command / groan) + SFX / emotional → 1 voice (monologue/narration) / transitional → 1 voice (narration) / spectacle → lead with SFX
+  Do not invent verbose dialogue unrelated to the scene.`;
+const REF_CONSTRAINT_SPATIAL_EN = `【Frame space — multi-character same-frame hard rules (2026-08-20)】
+R30-SPACE: When ≥2 characters appear in the same frame, you must:
+  1. In the corresponding time segment of detailed_description, clearly mark each character's frame position (left / right / above / below / foreground / background)
+  2. Characters must have a clear facing relationship:
+     - Adversarial/confrontation → standing opposite, eye contact, distributed left/right
+     - Alliance/cooperation → standing side-by-side same direction, staggered front/back
+     - Hierarchy → high position looking down vs. low position looking up
+  3. Do not have all characters face the same direction
+  4. Over-the-shoulder shots must mark the foreground character with their back to camera, the background character facing camera
+R31-POSITION: After each time segment, note the change in character positions.`;
+const REF_CONSTRAINT_FORMAT_EN = `【Format】
+R24. No markdown, code blocks, or comments — pure H3-format output.
+R25. Do not copy the script verbatim — convert it into rich, film-grade prose.
+R26. Characters are already in the reference images — describe only actions and state changes; do not describe static appearance.`;
+
 const refConstraintsH3Def: PromptDefinition = {
   key: "ref_video_h3_constraints",
   nameKey: "promptTemplates.prompts.refVideoH3Constraints",
   descriptionKey: "promptTemplates.prompts.refVideoH3ConstraintsDesc",
   category: "h3",
   slots: [
-    slot("core_format", REF_CONSTRAINT_FORMAT_6_SECTION, true),
-    slot("core_subject", REF_CONSTRAINT_SUBJECT_CLOSURE, true),
-    slot("core_env", REF_CONSTRAINT_ENV_REFERENCE, true),
-    slot("time_structure", REF_CONSTRAINT_TIME_STRUCTURE, true),
-    slot("camera", REF_CONSTRAINT_CAMERA, true),
-    slot("action_detail", REF_CONSTRAINT_ACTION_DETAIL, true),
-    slot("body_vocab", REF_CONSTRAINT_BODY_VOCAB, true),
-    slot("voice", REF_CONSTRAINT_VOICE, true),
-    slot("format", REF_CONSTRAINT_FORMAT, true),
-    slot("spatial", REF_CONSTRAINT_SPATIAL, true),
+    slot("core_format", REF_CONSTRAINT_FORMAT_6_SECTION, true, REF_CONSTRAINT_FORMAT_6_SECTION_EN),
+    slot("core_subject", REF_CONSTRAINT_SUBJECT_CLOSURE, true, REF_CONSTRAINT_SUBJECT_CLOSURE_EN),
+    slot("core_env", REF_CONSTRAINT_ENV_REFERENCE, true, REF_CONSTRAINT_ENV_REFERENCE_EN),
+    slot("time_structure", REF_CONSTRAINT_TIME_STRUCTURE, true, REF_CONSTRAINT_TIME_STRUCTURE_EN),
+    slot("camera", REF_CONSTRAINT_CAMERA, true, REF_CONSTRAINT_CAMERA_EN),
+    slot("action_detail", REF_CONSTRAINT_ACTION_DETAIL, true, REF_CONSTRAINT_ACTION_DETAIL_EN),
+    slot("body_vocab", REF_CONSTRAINT_BODY_VOCAB, true, REF_CONSTRAINT_BODY_VOCAB_EN),
+    slot("voice", REF_CONSTRAINT_VOICE, true, REF_CONSTRAINT_VOICE_EN),
+    slot("format", REF_CONSTRAINT_FORMAT, true, REF_CONSTRAINT_FORMAT_EN),
+    slot("spatial", REF_CONSTRAINT_SPATIAL, true, REF_CONSTRAINT_SPATIAL_EN),
   ],
   buildFullPrompt(sc) {
     const s = this.slots;
@@ -3606,14 +4472,60 @@ const REF_VIDEO_H3_RULES = [
   "- section标题必须全英文(如 subject_definitions:)",
 ].join("\n");
 
+const REF_VIDEO_H3_ROLE_EN = "You are a video-prompt-writing expert, compatible with the MiniMax H3 Ref2VA video-generation model. You will receive an **ordered** set of reference images and write the prompt from them: the first N are scene frames (pure environment / composition reference, in chronological order), the last M are character reference images (each bound to a character name). The 'script action' you receive contains a precise second-level timeline — the most important input for the output prompt — which you must break into a continuous action chain. Rhythm formula: one action beat every 2-3s, with transitional actions between beats.";
+const REF_VIDEO_H3_RULES_EN = [
+  "=== Character description spec ===",
+  "Describe each character's actual appearance from the reference image, organised by these elements:",
+  "- Gender and approximate age impression",
+  "- Height (cm) and build (lean / athletic / medium / stocky / heavyset)",
+  "- Facial features (face shape / skin tone / feature traits / beard / scars)",
+  "- Costume (colour / material / cut / layering / armour / accessories)",
+  "- Signature prop (weapon / held item)",
+  "- Mark the source image: in <Picture N>",
+  "",
+  "=== Core syntax (H3 <Subject N> / <Picture N> reference format) ===",
+  "- Refer to characters as <Subject N>; refer to images as <Picture N>",
+  "- Order strictly follows the reference-image order: first N are scene frames (<Picture 1>...), last M are characters (<Picture N+1>...)",
+  "- Writing style: flowing natural prose; embed <Subject N> and <Picture N> directly in the description",
+  "- No standalone mapping-declaration line; melt the info into the prose",
+  "- No structured labels like 'Beat 1 / Beat 2 / Beat 3'",
+  "",
+  "=== H3 camera-movement terminology (prefer these) ===",
+  "- Push-in (dolly-in): camera moves toward the subject",
+  "- Pull-out (dolly-out): camera moves away from the subject",
+  "- Pan: horizontal rotation",
+  "- Tilt: vertical rotation",
+  "- Crane: vertical move",
+  "- Truck / dolly: horizontal move",
+  "- Handheld: slight irregular shake",
+  "- Tracking: follow a moving subject",
+  "- Arc: orbit the subject",
+  "- Dolly-zoom (Vertigo): dolly + zoom combo",
+  "- Static: locked-off",
+  "- Slither: slider lateral move",
+  "- Macro: extreme close-up",
+  "- Always note amplitude: small / medium / large / extreme-speed",
+  "",
+  "=== Time-beat segmentation standard ===",
+  "- Split a {duration}s shot into 2-3s natural action beats",
+  "- Mark each beat with an exact start time (e.g. 0.0s, 2.5s, 5.0s)",
+  "- Beat boundaries should land on action turning points, camera-move changes, and dialogue insertions",
+  "- Rhythm formula: one action beat every 2-3s, bridged by transitional actions",
+  "- The action chain must be continuous: when one beat ends with the body in a pose, the next beat starts from that pose",
+  "",
+  "=== Dialogue-embedding spec ===",
+  "- Dialogue must use the <d>[language] original</d> format",
+  "- Chinese script: <d>[zh] ...</d>; English script: <d>[en] ...</d>",
+].join("\n");
+
 const refVideoPromptH3Def: PromptDefinition = {
   key: "ref_video_prompt_h3",
   nameKey: "promptTemplates.prompts.refVideoPromptH3",
   descriptionKey: "promptTemplates.prompts.refVideoPromptH3Desc",
   category: "video",
   slots: [
-    slot("role_definition", REF_VIDEO_H3_ROLE, true),
-    slot("rules", REF_VIDEO_H3_RULES, true),
+    slot("role_definition", REF_VIDEO_H3_ROLE, true, REF_VIDEO_H3_ROLE_EN),
+    slot("rules", REF_VIDEO_H3_RULES, true, REF_VIDEO_H3_RULES_EN),
     slot("output_format", "", false),
   ],
   buildFullPrompt(sc) {
