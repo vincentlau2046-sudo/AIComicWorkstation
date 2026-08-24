@@ -86,19 +86,19 @@ export function buildRefVideoPromptRequest(params: {
   }
 
   lines.push(``);
-  lines.push(`严格要求：`);
+  lines.push(`严格要求（按 MiniMax H3 官方格式）：`);
   if (!params.textOnly) {
-    lines.push(`1. 使用 \`@图片N\` 形式引用所有角色和场景（例：@图片1、@图片2），禁止写成 \`@图片N\``);
-    lines.push(`2. 写作风格为连贯的自然散文，把 @图片N 直接嵌入描述里，禁止"节拍 1/2/3"结构化标签`);
-    lines.push(`3. 禁止提示词开头写"图像映射：@图片1是 X，@图片2是 Y" 这种单独映射声明行——信息要融进散文`);
-    lines.push(`4. 每次 @图片N 后面都必须加括号注释角色/场景名，写成 @图片N（名字）的格式`);
+    lines.push(`1. 使用 \`@图片N\` 形式引用所有角色和场景（例：@图片1、@图片2），禁止写成带空格的 \`@图片 N\``);
+    lines.push(`2. 输出必须包含 H3 分镜时间线：integrated_multimodal_description 用 [Shot 1]（不加时间戳）→ [Shot 2] At 00:0X.XXX 切镜 → … → [Shot N]，切镜时间严格递增，最后一镜在视频结束前落到尾帧`);
+    lines.push(`3. 三个核心字段必须齐全：integrated_multimodal_description / overall_soundscape / non_diegetic_music（无配乐写 N/A）`);
+    lines.push(`4. 运镜按"运动类型 + 幅度 + 速度"三维写成自然动作（例：the camera pushes in with small amplitude at slow speed）`);
   } else {
-    lines.push(`1. 根据角色列表和场景描述，生成一段连贯的视频散文描述`);
+    lines.push(`1. 根据角色列表和场景描述，生成 H3 分镜时间线（[Shot 1]…[Shot N]）`);
     lines.push(`2. 禁止使用 @图片N 引用或任何图像标签`);
-    lines.push(`3. 禁止提示词开头写映射声明——直接开始描述画面`);
+    lines.push(`3. 三个核心字段齐全；无配乐时 non_diegetic_music 写 N/A`);
   }
-  lines.push(`5. 对白（如有）直接写在散文末尾：角色名台词：原文台词（不要 【对白口型】 等标签）`);
-  lines.push(`6. 仅输出提示词正文，无前言，无 markdown`);
+  lines.push(`5. 对白（如有）用说话人稳定 ID（S1/S2）+ [语言] 标签，原文逐字保留`);
+  lines.push(`6. 仅输出提示词正文，无前言、无 markdown、无注释`);
 
   return lines.join("\n");
 }

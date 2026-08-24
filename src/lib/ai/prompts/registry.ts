@@ -3292,7 +3292,22 @@ const FL2V_GUIDE_PRINCIPLES = `## 关键原则
    事是连着发生的，在描述里也是这样。`;
 
 const FL2V_GUIDE_OUTPUT = `## 输出
-仅输出 H3 格式内容。无前言、无 markdown、无注释。`;
+严格按 MiniMax H3 官方格式输出，无前言、无 markdown、无注释。必须包含：
+
+① 参考图对齐说明行（首帧/尾帧模式必须有，放在正文前一行 + 空行）：
+   参考图与目标视频的对齐方式——<Picture 1>（来自 [Shot 1]）对齐目标视频第 0.00 秒；
+   <Picture 2>（来自 [Shot 1]）对齐目标视频第 [时长] 秒。
+
+② 三个核心字段（顺序固定）：
+   integrated_multimodal_description: [Shot 1] ……
+   overall_soundscape: ……
+   non_diegetic_music: ……（无配乐写 N/A）
+
+③ 分镜系列规则：
+   - 首帧/尾帧模式默认单镜头：整段时长内用 [Shot 1] 覆盖 0→[时长]，从首帧连续插值到尾帧。
+   - 仅当剧本明确要求多镜头时：[Shot 1]（不加时间戳）→ [Shot 2] At 00:0X.XXX 切镜 → … → [Shot N]（切镜时间严格递增），最后一镜在视频结束前落到尾帧。
+   - 运镜按"运动类型 + 幅度 + 速度"三维写成自然动作（例：the camera pushes in with small amplitude at slow speed）。
+   - 说话人用 (S1)/(S2) 稳定 ID；台词用 [语言] 标签、原文逐字保留。`;
 
 const FL2V_GUIDE_ROLE_EN = `## Role
 You are the director / screenwriter.
@@ -3366,7 +3381,22 @@ const FL2V_GUIDE_PRINCIPLES_EN = `## Key principles
    is executed more stably by the engine than the one-shot "he walks to the table and slams a fist".
    Events happen in sequence; write them in sequence.`;
 const FL2V_GUIDE_OUTPUT_EN = `## Output
-Output H3-format content only. No preamble, no markdown, no comments.`;
+Follow the official MiniMax H3 format exactly. No preamble, no markdown, no comments. You must include:
+
+① The reference-image alignment line (required for first/last-frame mode, placed on the line before the body, separated by one blank line):
+   How the reference pictures align with the target video — <Picture 1> (from [Shot 1]) aligns with the 0.00-second mark of the target video;
+   <Picture 2> (from [Shot 1]) aligns with the [duration]-second mark of the target video.
+
+② The three core fields (fixed order):
+   integrated_multimodal_description: [Shot 1] ……
+   overall_soundscape: ……
+   non_diegetic_music: …… (write N/A when there is no score)
+
+③ Shot-series rules:
+   - First/last-frame mode defaults to a single shot: [Shot 1] covers 0→[duration], interpolating continuously from the first frame to the last.
+   - Only when the script explicitly requires multiple shots: [Shot 1] (no timestamp) → [Shot 2] At 00:0X.XXX cut → … → [Shot N] (strictly increasing cut times), and the last shot lands on the last frame before the video ends.
+   - Express camera motion as a natural action with motion type + amplitude + speed (e.g. "the camera pushes in with small amplitude at slow speed").
+   - Use stable speaker IDs (S1)/(S2); keep dialogue verbatim inside a [language] tag.`;
 
 const fl2vGuideDef: PromptDefinition = {
   key: "video_h3_fl2v_guide",

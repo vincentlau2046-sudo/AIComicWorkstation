@@ -16,6 +16,51 @@ export function resolveLanguage(input: H3PromptInput): H3Language {
   return detectLanguage(input.videoScript) as H3Language;
 }
 
+/** Format a second value as MM:SS.SSS (e.g. 4 → "00:04.000"). */
+function fmtTime(second: number): string {
+  const m = Math.floor(second / 60);
+  const s = second - m * 60;
+  return `${String(m).padStart(2, "0")}:${s.toFixed(3)}`;
+}
+
+/**
+ * Expand a videoScript into a MiniMax H3 shot series.
+ *
+ * If the script contains time-stamped beats ("0-4s:" / "4-8秒:" etc.),
+ * emit [Shot 1] (no timestamp) → [Shot 2] At MM:SS.SSS cut → … → [Shot N],
+ * matching the official H3 timeline format. A script without time-stamped
+ * beats collapses to a single [Shot 1].
+ */
+export function expandShotSeries(
+  videoScript: string,
+  camera: string,
+  lang: "zh" | "en",
+  suffix = ""
+): string {
+  const headerRe = /(\d+)\s*[-~]\s*\d+\s*(?:秒|s)?\s*[:：]/g;
+  const headers = [...videoScript.matchAll(headerRe)];
+  if (headers.length <= 1) {
+    return `[Shot 1] ${videoScript} ${camera}${suffix}`.trim();
+  }
+  const out: string[] = [];
+  headers.forEach((h, i) => {
+    const startSec = parseInt(h[1], 10);
+    const bodyStart = h.index! + h[0].length;
+    const next = headers[i + 1];
+    const bodyEnd = next ? next.index! : videoScript.length;
+    const body = videoScript.slice(bodyStart, bodyEnd).trim();
+    const isLast = i === headers.length - 1;
+    const label = i === 0
+      ? "[Shot 1]"
+      : lang === "zh"
+        ? `[Shot ${i + 1}] ${fmtTime(startSec)} 切镜`
+        : `[Shot ${i + 1}] At ${fmtTime(startSec)}`;
+    const cameraSuffix = isLast ? ` ${camera}${suffix}` : "";
+    out.push(`${label} ${body}${cameraSuffix}`.trim());
+  });
+  return out.join("\n");
+}
+
 /**
  * Build local H3 prompt sections — format-only, no LLM.
  * Used as a fast fallback for FL2V and as the base component
@@ -36,8 +81,8 @@ export function buildH3Sections(
       languageUsed: "zh",
       sections: [
         prefix
-          ? `${prefix}\n\n集成多模态描述 (integrated_multimodal_description):\n[Shot 1] ${input.videoScript} ${camera}。`
-          : `集成多模态描述 (integrated_multimodal_description):\n[Shot 1] ${input.videoScript} ${camera}。`,
+          ? `${prefix}\n\n集成多模态描述 (integrated_multimodal_description):\n${expandShotSeries(input.videoScript, camera, "zh", "。")}`
+          : `集成多模态描述 (integrated_multimodal_description):\n${expandShotSeries(input.videoScript, camera, "zh", "。")}`,
         `整体环境音 (overall_soundscape): ${input.soundDesign || "N/A"}`,
         input.bgmUrl
           ? "非叙事音乐 (non_diegetic_music): <Audio 1> 作为背景配乐参考。"
@@ -52,8 +97,8 @@ export function buildH3Sections(
     languageUsed: "en",
     sections: [
       prefix
-        ? `${prefix}\n\nintegrated_multimodal_description:\n[Shot 1] ${input.videoScript} ${camera}.`
-        : `integrated_multimodal_description:\n[Shot 1] ${input.videoScript} ${camera}.`,
+        ? `${prefix}\n\nintegrated_multimodal_description:\n${expandShotSeries(input.videoScript, camera, "en", ".")}`
+        : `integrated_multimodal_description:\n${expandShotSeries(input.videoScript, camera, "en", ".")}`,
       `overall_soundscape: ${input.soundDesign || "N/A"}`,
       input.bgmUrl
         ? "non_diegetic_music: <Audio 1> is referenced as the background score."
@@ -119,7 +164,7 @@ export function parseLLMSections(
     sections.push(
       imdMatch
         ? (prefix ? `${prefix}\n\n集成多模态描述 (integrated_multimodal_description):\n${imdMatch[1].trim()}` : `集成多模态描述 (integrated_multimodal_description):\n${imdMatch[1].trim()}`)
-        : `集成多模态描述 (integrated_multimodal_description):\n[Shot 1] ${input.videoScript}`
+        : `集成多模态描述 (integrated_multimodal_description):\n${expandShotSeries(input.videoScript, "", lang)}`
     );
     sections.push(
       osMatch ? `整体环境音 (overall_soundscape): ${osMatch[1].trim()}` : `整体环境音 (overall_soundscape): ${input.soundDesign || "N/A"}`
@@ -135,7 +180,7 @@ export function parseLLMSections(
     sections.push(
       imd
         ? (prefix ? `${prefix}\n\nintegrated_multimodal_description:\n${imd[1].trim()}` : `integrated_multimodal_description:\n${imd[1].trim()}`)
-        : `integrated_multimodal_description:\n[Shot 1] ${input.videoScript}`
+        : `integrated_multimodal_description:\n${expandShotSeries(input.videoScript, "", lang)}`
     );
     sections.push(
       os ? `overall_soundscape: ${os[1].trim()}` : `overall_soundscape: ${input.soundDesign || "N/A"}`
