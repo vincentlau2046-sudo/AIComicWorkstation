@@ -2079,6 +2079,58 @@ const shotKeyframeAssetsDef: PromptDefinition = {
   },
 };
 
+// ─── 7.6. shot_rewrite (single shot text rewrite) ──
+// Rewrites a single shot's text fields (prompt / start/end frame desc /
+// motionScript / videoScript / cameraDirection) so they are vivid, AI-image-safe
+// and language-consistent. Registered so it supports prompt_templates overrides.
+const SHOT_REWRITE_ROLE = `You are a storyboard director. Rewrite the text fields for a single shot so the descriptions are vivid, safe for AI image generation, and free of any potentially sensitive content. Keep the same scene, characters, and narrative intent — only rephrase to avoid safety filter triggers. Match the language of the original text.`;
+const SHOT_REWRITE_ROLE_ZH = `你是一位分镜导演。请为单个镜头改写其文本字段，使描述生动、适合 AI 图像生成，并去除可能触发敏感过滤的内容。保持同一场景、角色与叙事意图，仅改写措辞以避免安全过滤器触发。输出语言与原文保持一致。`;
+
+const SHOT_REWRITE_OUTPUT = `Return ONLY a JSON object (no markdown fences) with these fields:
+{
+  "prompt": "rewritten scene description",
+  "startFrameDesc": "rewritten start frame description",
+  "endFrameDesc": "rewritten end frame description",
+  "motionScript": "rewritten motion script in time-segmented format (0-Xs: ... Xs-Ys: ...)",
+  "videoScript": "rewritten concise video model prompt: 1-2 sentences, no timestamps, just core motion and camera arc",
+  "cameraDirection": "camera direction (keep original or adjust)"
+}`;
+const SHOT_REWRITE_OUTPUT_ZH = `只返回一个 JSON 对象（不要 markdown 代码块），包含以下字段：
+{
+  "prompt": "改写后的场景描述",
+  "startFrameDesc": "改写后的首帧描述",
+  "endFrameDesc": "改写后的尾帧描述",
+  "motionScript": "按时间段改写的运动脚本（0-Xs: ... Xs-Ys: ...）",
+  "videoScript": "改写后的简洁视频模型提示词：1-2 句，不含时间戳，只写核心动作与镜头运动",
+  "cameraDirection": "镜头运动指示（保留原值或调整）"
+}`;
+
+const SHOT_REWRITE_LANG = `Match the language of the original text in every output field.`;
+const SHOT_REWRITE_LANG_ZH = `所有输出字段的语言必须与原文保持一致（中文输入→中文输出，英文输入→英文输出）。`;
+
+const shotRewriteDef: PromptDefinition = {
+  key: "shot_rewrite",
+  nameKey: "promptTemplates.prompts.shotRewrite",
+  descriptionKey: "promptTemplates.prompts.shotRewriteDesc",
+  category: "shot",
+  slots: [
+    slot("role_definition", SHOT_REWRITE_ROLE, true, SHOT_REWRITE_ROLE_ZH),
+    slot("output_format", SHOT_REWRITE_OUTPUT, false, SHOT_REWRITE_OUTPUT_ZH),
+    slot("language_rules", SHOT_REWRITE_LANG, false, SHOT_REWRITE_LANG_ZH),
+  ],
+  buildFullPrompt(sc) {
+    const s = this.slots;
+    const r = (k: string) => resolve(sc, s, k);
+    return [
+      r("role_definition"),
+      "",
+      r("output_format"),
+      "",
+      r("language_rules"),
+    ].join("\n");
+  },
+};
+
 // ─── 8. frame_generate_first ────────────────────────────
 
 const FIRST_FRAME_STYLE_MATCHING = `=== 关键：画风匹配（最高优先级）===
@@ -3559,6 +3611,7 @@ export const PROMPT_REGISTRY: PromptDefinition[] = [
   r2iPromptDef,
   shotSplitDef,
   shotKeyframeAssetsDef,
+  shotRewriteDef,
   frameGenerateFirstDef,
   frameGenerateLastDef,
   sceneFrameGenerateDef,

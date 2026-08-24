@@ -403,6 +403,8 @@
       "videoH3PromptDesc": "Structured prompt template for MiniMax H3 video generation",
       "shotSplitKeyframeAssets": "Shot · Keyframe Asset Prompts",
       "shotSplitKeyframeAssetsDesc": "Generate first/last frame image prompts from existing shot metadata",
+      "shotRewrite": "Single Shot Rewrite",
+      "shotRewriteDesc": "Rewrite a single shot's text fields (scene/frames/motion/video/camera) so they are vivid and safe for AI image generation",
       "shotSplitReferenceAssets": "Shot · Reference Image Prompts",
       "shotSplitReferenceAssetsDesc": "Generate reference image prompts from existing shot metadata",
       "projectAssess": "Project Assessment",

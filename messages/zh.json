@@ -406,6 +406,8 @@
       "videoH3PromptDesc": "MiniMax H3 视频生成的结构化提示词模板",
       "shotSplitKeyframeAssets": "分镜·首尾帧提示词",
       "shotSplitKeyframeAssetsDesc": "基于已有镜头元数据生成首帧/尾帧的图像提示词",
+      "shotRewrite": "单镜头文本改写",
+      "shotRewriteDesc": "改写单个镜头的文本字段（场景/首尾帧/运动脚本/视频脚本/镜头运动），使其生动且适合 AI 图像生成",
       "shotSplitReferenceAssets": "分镜·参考图提示词",
       "shotSplitReferenceAssetsDesc": "基于已有镜头元数据生成参考图的图像提示词",
       "projectAssess": "项目定位",

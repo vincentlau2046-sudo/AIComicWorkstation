@@ -219,7 +219,7 @@ export async function POST(
   }
 
   if (action === "single_shot_rewrite") {
-    return handleSingleShotRewrite(projectId, payload, modelConfig, episodeId);
+    return handleSingleShotRewrite(projectId, userId, payload, modelConfig, episodeId);
   }
 
   if (action === "batch_frame_generate") {
@@ -1926,6 +1926,7 @@ function splitScriptByScenes(script: string, maxScenes: number): string[] {
 
 async function handleSingleShotRewrite(
   projectId: string,
+  userId: string,
   payload?: Record<string, unknown>,
   modelConfig?: ModelConfig,
   episodeId?: string
@@ -1955,10 +1956,10 @@ async function handleSingleShotRewrite(
     .join("\n");
 
   const model = createLanguageModel(modelConfig.text);
+  const language = /[一-鿿]/.test(shot.prompt || "") ? "zh" : "en";
+  const system = await resolvePrompt("shot_rewrite", { userId, projectId, language });
 
-  const prompt = `You are a storyboard director. Rewrite the text fields for a single shot so the descriptions are vivid, safe for AI image generation, and free of any potentially sensitive content.
-
-Current shot (sequence ${shot.sequence}):
+  const userPrompt = `Current shot (sequence ${shot.sequence}):
 - Scene description: ${shot.prompt || ""}
 - Start frame: ${shotView.startFrameDesc || ""}
 - End frame: ${shotView.endFrameDesc || ""}
@@ -1969,25 +1970,13 @@ Current shot (sequence ${shot.sequence}):
 
 Character references:
 ${characterDescriptions || "none"}
-${characterVisualHints ? `\nCHARACTER VISUAL IDs (MANDATORY — whenever a character appears in any field, write their name followed by exactly this identifier in parentheses, e.g. 天枢真君（银发金瞳）. Never invent alternatives):\n${characterVisualHints}` : ""}
+${characterVisualHints ? `\nCHARACTER VISUAL IDs (MANDATORY — whenever a character appears in any field, write their name followed by exactly this identifier in parentheses, e.g. 天枢真君（银发金瞳）. Never invent alternatives):\n${characterVisualHints}` : ""}`;
 
-Return ONLY a JSON object (no markdown fences) with these fields:
-{
-  "prompt": "rewritten scene description",
-  "startFrameDesc": "rewritten start frame description",
-  "endFrameDesc": "rewritten end frame description",
-  "motionScript": "rewritten motion script in time-segmented format (0-Xs: ... Xs-Ys: ...)",
-  "videoScript": "rewritten concise video model prompt: 1-2 sentences, no timestamps, just core motion and camera arc",
-  "cameraDirection": "camera direction (keep original or adjust)"
-}
-
-IMPORTANT: Keep the same scene, characters, and narrative intent. Only rephrase to avoid safety filter triggers. Match the language of the original text.`;
-
-  console.log(`[SingleShotRewrite] Shot ${shot.sequence} prompt:\n${prompt}`);
+  console.log(`[SingleShotRewrite] Shot ${shot.sequence} prompt:\n${userPrompt}`);
 
   try {
     const { text } = await import("ai").then(({ generateText }) =>
-      generateText({ model, prompt, temperature: 0.7 })
+      generateText({ model, system, prompt: userPrompt, temperature: 0.7 })
     );
 
     const parsed = JSON.parse(extractJSON(text)) as {
