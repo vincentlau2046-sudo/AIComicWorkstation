@@ -7,6 +7,7 @@ import { generateText } from "ai";
 import { createLanguageModel } from "@/lib/ai/ai-sdk";
 import { buildCharacterFrontViewPrompt } from "@/lib/ai/prompts/character-image";
 import { buildPhaseR2IPrompt } from "@/lib/ai/prompts/phase-image";
+import { resolvePrompt, resolveSlotContents } from "@/lib/ai/prompts/resolver";
 import type { ProviderConfig } from "@/lib/ai/ai-sdk";
 
 export const maxDuration = 600;
@@ -53,14 +54,8 @@ export async function POST(
 
   // 步骤2：基于 EP 链的 T2I structure 方式，为 template 角色卡生成 t2i_structure
   // 输入 = 角色 description + visualHint（不含 EP 剧本内容）
-  const language = body.language;
-  const t2iSystem = language === "zh"
-    ? "根据角色档案（description + visualHint），生成该角色的 t2iStructure JSON。" +
-      "输出必须是 JSON 对象，含 7 个字段：age/subject/body/face/hair/clothing/lighting。" +
-      "标签名用英文，字段值用中文。必须保留 description 中的风格/材质/光照提示（如 3D 国漫渲染风格、细腻材质、体积光）。只返回 JSON。"
-    : "From the character profile (description + visualHint), generate the character's t2iStructure JSON. " +
-      "Output MUST be a JSON object with 7 fields: age/subject/body/face/hair/clothing/lighting. " +
-      "Tag names in English, field values in the source language. Preserve the style/material/lighting hints from the description. Return JSON only.";
+  const language = body.language ?? "en";
+  const t2iSystem = await resolvePrompt("t2i_prompt", { userId, projectId, language });
 
   if (body.type === "t2i_prompt" && body.modelConfig?.text) {
     const model = createLanguageModel(body.modelConfig.text);
@@ -87,7 +82,8 @@ export async function POST(
       }
     }
   } else if (body.type === "r2i_prompt" && body.modelConfig?.text) {
-    const model = createLanguageModel(body.modelConfig.text);
+    const r2iSlots = await resolveSlotContents("r2i_prompt", { userId, projectId, language });
+    const r2iPreserveLine = r2iSlots?.preserve_rules;
     const templates = await db
       .select()
       .from(characters)
@@ -104,6 +100,7 @@ export async function POST(
           phaseName: item.phaseName || "",
           visualChanges,
           templateDescription: template?.description || item.description || "",
+          preserveLine: r2iPreserveLine,
         });
         await db.update(characters).set({ r2iStructure: r2iPrompt }).where(eq(characters.id, item.id));
         results.push({ id: item.id, name: item.name, status: "ok" });

@@ -3,9 +3,11 @@ import { db } from "@/lib/db";
 import { characters } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { assertProjectOwnership } from "@/lib/assert-project-ownership";
+import { getUserIdFromRequest } from "@/lib/get-user-id";
 import { generateText } from "ai";
 import { createLanguageModel, extractJSON, type ProviderConfig } from "@/lib/ai/ai-sdk";
 import { buildCharacterFrontViewPrompt } from "@/lib/ai/prompts/character-image";
+import { resolvePrompt } from "@/lib/ai/prompts/resolver";
 
 /**
  * 单角色 T2I 提示词（t2iStructure）生成。
@@ -17,6 +19,7 @@ export async function POST(
   { params }: { params: Promise<{ id: string; characterId: string }> }
 ) {
   const { id: projectId, characterId } = await params;
+  const userId = getUserIdFromRequest(request);
   if (!(await assertProjectOwnership(request, projectId))) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
@@ -48,14 +51,8 @@ export async function POST(
     prompt = `${prompt}\n[visualHint] ${character.visualHint}`;
   }
 
-  const language = body.language;
-  const t2iSystem = language === "zh"
-    ? "根据角色档案（description + visualHint），生成该角色的 t2iStructure JSON。" +
-      "输出必须是 JSON 对象，含 7 个字段：age/subject/body/face/hair/clothing/lighting。" +
-      "标签名用英文，字段值用中文。必须保留 description 中的风格/材质/光照提示（如 3D 国漫渲染风格、细腻材质、体积光）。只返回 JSON。"
-    : "From the character profile (description + visualHint), generate the character's t2iStructure JSON. " +
-      "Output MUST be a JSON object with 7 fields: age/subject/body/face/hair/clothing/lighting. " +
-      "Tag names in English, field values in the source language. Preserve the style/material/lighting hints from the description. Return JSON only.";
+  const language = body.language ?? "en";
+  const t2iSystem = await resolvePrompt("t2i_prompt", { userId, projectId, language });
 
   const model = createLanguageModel(body.modelConfig.text);
   const result = await generateText({ model, system: t2iSystem, prompt });

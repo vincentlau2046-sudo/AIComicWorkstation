@@ -1367,6 +1367,134 @@ const phaseImageDef: PromptDefinition = {
   },
 };
 
+// ─── character: enrich_phases / t2i_prompt / r2i_prompt ───
+
+const ENRICH_PHASES_ROLE_ZH = `你是一位角色设计师。基于剧情上下文，为视觉阶段角色补充或优化以下字段：
+- description（视觉角色卡）：见下方「description 写作规则」。
+- visualHint：2-4 词的外貌标识符（描述外貌而非动作，如「龙袍金冠阴沉脸」）。
+- t2iStructure：7 字段 JSON（age/subject/body/face/hair/clothing/lighting，英文标签，字段值随语言），对齐 batch-generate。
+- heightCm：合理整数身高（cm）。
+- bodyType：体型（如 slim/average/athletic/stocky）。
+若现有 description 为空或质量不足，请从专业视角重新生成，而非简单追加。`;
+const ENRICH_PHASES_ROLE_EN = `You are a character designer. Using the episode context, enrich or refine the following fields for each visual-phase character:
+- description (visual character card): see the "description writing rules" below.
+- visualHint: a 2-4 word APPEARANCE identifier (describes appearance, not actions; e.g. "龙袍金冠阴沉脸" / "silver hair red coat").
+- t2iStructure: 7-field JSON (age/subject/body/face/hair/clothing/lighting; English tags, values follow the language), aligned with batch-generate.
+- heightCm: reasonable integer height in cm.
+- bodyType: body build (slim/average/athletic/stocky, etc.).
+If the existing description is empty or low quality, regenerate it from a professional perspective rather than simply appending.`;
+
+const ENRICH_PHASES_DESC_RULES_ZH = `description 写作规则（视觉角色卡）：
+- description 必须是「视觉角色卡」，格式参照模板角色定义（继承项目视觉风格）：
+  [风格前缀（继承项目视觉风格，如「3D国漫渲染风格，细腻材质与体积光」）]——性别，年龄区间。
+  身姿…，面部…，皮肤…，发型…，服装（必须含足部：鞋/靴子/光脚等）…，色彩调色板：…。
+- description 只描述「长什么样」，不写「发生了什么」。剧情/生平由 [分集上下文] 表达（推断该阶段的视觉状态）。
+- 禁止在 description 中出现「EP.x」或剧情事件（如「斩赵文」「整饬贪腐」）。
+- 参考实例：「3D国漫渲染风格，细腻材质与体积光——男，16-18岁。清瘦挺拔，带乡野少年稚气。圆脸，眼廓明亮，皮肤白皙未历风霜。束发于顶，木簪固定，几缕碎发垂落额前。粗布长衫洗白，腰系麻绳，足蹬草鞋沾泥。色彩调色板：青灰、米白、土黄。」`;
+const ENRICH_PHASES_DESC_RULES_EN = `description writing rules (visual character card):
+- description MUST be a "visual character card", following the template character definition (inheriting the project visual style):
+  [style prefix (inheriting project visual style, e.g. "3D guoman render style, fine materials, volumetric light")] — gender, age range.
+  Build…, face…, skin…, hair…, clothing (must include footwear: shoes/boots/bare feet, etc.)…, color palette: …
+- description describes "what they look like", not "what happened". Plot/life is carried by [Episode Context] (infer the visual state of that phase).
+- Do NOT write "EP.x" or plot events (e.g. "executed Zhao Wen", "rectified corruption") into description.
+- Reference example: "3D guoman render style, fine materials and volumetric light — male, 16-18 years old. Slender and upright, with a country youth's innocence. Round face, bright eyes, fair unweathered skin. Hair bound at the crown, fixed with a wooden hairpin, a few strands falling on the forehead. Coarse-cloth long gown washed white, hemp rope at the waist, straw shoes caked with mud. Color palette: blue-grey, off-white, earthy yellow."`;
+
+const ENRICH_PHASES_OUTPUT_ZH = `只输出 JSON：
+{
+  "phaseEnrichments": [
+    {
+      "phaseName": "阶段名",
+      "description": "视觉角色卡（含足部）",
+      "visualHint": "2-4词外貌标识",
+      "t2iStructure": { "age": "...", "subject": "...", "body": "...", "face": "...", "hair": "...", "clothing": "...", "lighting": "..." },
+      "heightCm": 175,
+      "bodyType": "athletic"
+    }
+  ]`;
+const ENRICH_PHASES_OUTPUT_EN = `Output JSON only:
+{
+  "phaseEnrichments": [
+    {
+      "phaseName": "phase",
+      "description": "visual character card (with footwear)",
+      "visualHint": "2-4 word appearance identifier",
+      "t2iStructure": { "age": "...", "subject": "...", "body": "...", "face": "...", "hair": "...", "clothing": "...", "lighting": "..." },
+      "heightCm": 175,
+      "bodyType": "athletic"
+    }
+  ]`;
+
+const ENRICH_PHASES_LANG_ZH = `语言规则：始终使用与用户输入相同的语言撰写。用户用中文则全部中文，用英文则全部英文。`;
+const ENRICH_PHASES_LANG_EN = `Language rules: always write in the same language as the user's input.`;
+
+const enrichPhasesDef: PromptDefinition = {
+  key: "enrich_phases",
+  nameKey: "promptTemplates.prompts.enrichPhases",
+  descriptionKey: "promptTemplates.prompts.enrichPhasesDesc",
+  category: "character",
+  slots: [
+    slot("role_definition", ENRICH_PHASES_ROLE_ZH, true, ENRICH_PHASES_ROLE_EN),
+    slot("description_rules", ENRICH_PHASES_DESC_RULES_ZH, true, ENRICH_PHASES_DESC_RULES_EN),
+    slot("output_format", ENRICH_PHASES_OUTPUT_ZH, false, ENRICH_PHASES_OUTPUT_EN),
+    slot("language_rules", ENRICH_PHASES_LANG_ZH, false, ENRICH_PHASES_LANG_EN),
+  ],
+  buildFullPrompt(sc) {
+    const s = this.slots;
+    const r = (k: string) => resolve(sc, s, k);
+    return [r("role_definition"), "", r("description_rules"), "", r("output_format"), "", r("language_rules")].join("\n");
+  },
+};
+
+const T2I_PROMPT_TASK_ZH = `根据角色档案（description + visualHint），生成该角色的 t2iStructure JSON。输出必须是 JSON 对象，含 7 个字段：age/subject/body/face/hair/clothing/lighting。标签名用英文，字段值用中文。必须保留 description 中的风格/材质/光照提示（如 3D 国漫渲染风格、细腻材质、体积光）。只返回 JSON。`;
+const T2I_PROMPT_TASK_EN = `From the character profile (description + visualHint), generate the character's t2iStructure JSON. Output MUST be a JSON object with 7 fields: age/subject/body/face/hair/clothing/lighting. Tag names in English, field values in the source language. Preserve the style/material/lighting hints from the description. Return JSON only.`;
+
+const T2I_PROMPT_OUTPUT_ZH = `只返回 JSON 对象（7 字段）：
+{ "age": "...", "subject": "...", "body": "...", "face": "...", "hair": "...", "clothing": "...", "lighting": "..." }`;
+const T2I_PROMPT_OUTPUT_EN = `Return a JSON object (7 fields) only:
+{ "age": "...", "subject": "...", "body": "...", "face": "...", "hair": "...", "clothing": "...", "lighting": "..." }`;
+
+const T2I_PROMPT_LANG_ZH = `语言规则：字段值使用与角色档案相同的语言。`;
+const T2I_PROMPT_LANG_EN = `Language rules: field values use the same language as the character profile.`;
+
+const t2iPromptDef: PromptDefinition = {
+  key: "t2i_prompt",
+  nameKey: "promptTemplates.prompts.t2iPrompt",
+  descriptionKey: "promptTemplates.prompts.t2iPromptDesc",
+  category: "character",
+  slots: [
+    slot("task", T2I_PROMPT_TASK_ZH, true, T2I_PROMPT_TASK_EN),
+    slot("output_format", T2I_PROMPT_OUTPUT_ZH, false, T2I_PROMPT_OUTPUT_EN),
+    slot("language_rules", T2I_PROMPT_LANG_ZH, false, T2I_PROMPT_LANG_EN),
+  ],
+  buildFullPrompt(sc) {
+    const s = this.slots;
+    const r = (k: string) => resolve(sc, s, k);
+    return [r("task"), "", r("output_format"), "", r("language_rules")].join("\n");
+  },
+};
+
+const R2I_ROLE_ZH = `你是一位角色一致性专家。给定角色名 + 阶段名 + 外观变化，生成该阶段的 R2I 提示词（参考图提示词）。`;
+const R2I_ROLE_EN = `You are a character-consistency specialist. Given the character name + phase name + appearance changes, generate the R2I prompt (reference-image prompt) for that phase.`;
+
+const R2I_PRESERVE_ZH = `保持相同的面部骨骼结构、眼型、鼻型、唇形和身体比例；保持相同的肤色和体格；保持相同的画风和光照质量；保持纯白背景和专业摄影棚布光。其他一切保持不变。`;
+const R2I_PRESERVE_EN = `Keep the same facial bone structure, eye shape, nose shape, lip shape, and body proportions; preserve the same skin tone and overall physique; keep the same art style and lighting quality; maintain a white background with professional studio lighting. Keep everything else unchanged.`;
+
+const r2iPromptDef: PromptDefinition = {
+  key: "r2i_prompt",
+  nameKey: "promptTemplates.prompts.r2iPrompt",
+  descriptionKey: "promptTemplates.prompts.r2iPromptDesc",
+  category: "character",
+  slots: [
+    slot("role_definition", R2I_ROLE_ZH, true, R2I_ROLE_EN),
+    slot("preserve_rules", R2I_PRESERVE_ZH, true, R2I_PRESERVE_EN),
+  ],
+  buildFullPrompt(sc) {
+    const s = this.slots;
+    const r = (k: string) => resolve(sc, s, k);
+    return [r("role_definition"), "", r("preserve_rules")].join("\n");
+  },
+};
+
 // ─── 7. shot_split ──────────────────────────────────────
 
 const SHOT_SPLIT_ROLE_DEFINITION = `你是一位经验丰富的分镜导演和摄影指导，擅长动画短片制作。你规划的镜头列表视觉动态丰富、叙事高效，并为AI视频生成流水线优化（首帧 → 尾帧 → 插值视频）。
@@ -3426,6 +3554,9 @@ export const PROMPT_REGISTRY: PromptDefinition[] = [
   importArcDef,
   characterImageDef,
   phaseImageDef,
+  enrichPhasesDef,
+  t2iPromptDef,
+  r2iPromptDef,
   shotSplitDef,
   shotKeyframeAssetsDef,
   frameGenerateFirstDef,
