@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { projects, episodes, characters, episodeCharacters, characterRelations } from "@/lib/db/schema";
-import { eq, and, max } from "drizzle-orm";
+import { eq, and, isNull, max } from "drizzle-orm";
 import { id as genId } from "@/lib/id";
 import { getUserIdFromRequest } from "@/lib/get-user-id";
 import { addImportLog } from "@/lib/import-utils";
@@ -192,6 +192,20 @@ export async function POST(
       for (const arc of body.characterArcs) {
         const charId = charIdByName.get(arc.characterName.toLowerCase().trim());
         if (!charId) continue;
+
+        // ②: Template 行若已有 front_view_image，Phase 行创建时自动继承为参考图
+        // （消除导入后到 D.2 执行前的"无图空窗"）
+        const [templateRow] = await db
+          .select({ frontViewImage: characters.frontViewImage })
+          .from(characters)
+          .where(
+            and(
+              eq(characters.projectId, projectId),
+              eq(characters.baseName, arc.characterName),
+              isNull(characters.episodeId),
+              isNull(characters.phaseName)
+            )
+          );
         for (let i = 0; i < arc.phases.length; i++) {
           const p = arc.phases[i];
           const templateScope = body.characters.find(
@@ -204,6 +218,7 @@ export async function POST(
             name: `${arc.characterName}（${p.phaseName}）`,
             description: p.description || "",
             visualHint: (p as any).visualHint || "",
+            referenceImage: templateRow?.frontViewImage || null,
             phaseName: p.phaseName,
             episodeStart: p.episodeStart || p.episodeEnd || 0,
             episodeEnd: p.episodeEnd || p.episodeStart || 0,

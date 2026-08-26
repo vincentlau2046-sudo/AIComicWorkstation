@@ -21,7 +21,7 @@ import { eq, and, desc } from "drizzle-orm";
 import type { Task } from "@/lib/task-queue";
 import { failTask } from "@/lib/task-queue";
 import { getActiveAsset, getActiveAssets, insertAssetVersion, loadShotLegacyView, stripCharHint, copyToUploads } from "@/lib/shot-asset-utils";
-import { getEpisodeCharacters } from "@/lib/db/episode-characters";
+import { getEpisodeCharacters, assertEpisodeCharactersHaveReferences } from "@/lib/db/episode-characters";
 
 export async function handleReferenceVideoGenerate(task: Task) {
   const payload = task.payload as {
@@ -85,6 +85,13 @@ export async function handleReferenceVideoGenerate(task: Task) {
 
   // 4. Collect character references
   const projectCharacters = await getEpisodeCharacters(payload.projectId, shot.episodeId);
+  // ⑧ guard: Phase/Guest 行缺参考图 → 直接报错（failTask），倒逼先完成 D.2
+  try {
+    await assertEpisodeCharactersHaveReferences(payload.projectId, shot.episodeId);
+  } catch (err) {
+    await failTask(task.id, err instanceof Error ? err.message : "Character reference images missing");
+    return;
+  }
   const shotCharNames = new Set<string>();
   for (const r of allRefs) {
     for (const n of r.characters ?? []) shotCharNames.add(stripCharHint(n));

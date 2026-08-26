@@ -58,3 +58,33 @@ export async function getEpisodeCharacters(
     .from(characters)
     .where(eq(characters.projectId, projectId));
 }
+
+/**
+ * ⑧ Read-time guard (v0.0.6): when an EP-scoped read returns rows without
+ * `referenceImage`, throw immediately so the S stage surfaces a clear error
+ * instead of silently dropping the character. The fix path is D.2 (generate
+ * the Phase row's reference image) — no silent merge.
+ */
+export class CharacterReferenceMissingError extends Error {
+  readonly missingNames: string[];
+
+  constructor(missingNames: string[]) {
+    super(
+      `${missingNames.length} 个角色缺少参考图（reference_image 为空）：${missingNames.join("、")}。请先在角色面板完成 D.2 参考图生成（Phase 行生成参考图），再重跑本环节。`
+    );
+    this.name = "CharacterReferenceMissingError";
+    this.missingNames = missingNames;
+  }
+}
+
+export async function assertEpisodeCharactersHaveReferences(
+  projectId: string,
+  episodeId?: string | null
+): Promise<void> {
+  if (!episodeId) return; // 项目级读取不强制
+  const rows = await getEpisodeCharacters(projectId, episodeId);
+  const missing = rows.filter((c) => !c.referenceImage).map((c) => c.name);
+  if (missing.length > 0) {
+    throw new CharacterReferenceMissingError(missing);
+  }
+}

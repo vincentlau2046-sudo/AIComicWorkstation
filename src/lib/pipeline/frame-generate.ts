@@ -10,7 +10,7 @@ import { resolveSlotContents } from "@/lib/ai/prompts/resolver";
 import { eq, and, lt, desc } from "drizzle-orm";
 import type { Task } from "@/lib/task-queue";
 import { getActiveAsset, getLatestCompletedAsset, insertAssetVersion, patchAsset, copyToUploads, stripCharHint, buildCharMap, resolveFrameCharacters } from "@/lib/shot-asset-utils";
-import { getEpisodeCharacters } from "@/lib/db/episode-characters";
+import { getEpisodeCharacters, assertEpisodeCharactersHaveReferences } from "@/lib/db/episode-characters";
 import { ratioToSize } from "@/lib/ai/size";
 
 export async function handleFrameGenerate(task: Task) {
@@ -31,6 +31,8 @@ export async function handleFrameGenerate(task: Task) {
   if (!shot) throw new Error("Shot not found");
 
   const projectCharacters = await getEpisodeCharacters(payload.projectId, shot.episodeId);
+  // ⑧ guard: Phase/Guest 行缺参考图 → 直接报错，倒逼先完成 D.2
+  await assertEpisodeCharactersHaveReferences(payload.projectId, shot.episodeId);
 
   // Parse costume overrides from shot
   const rawCostumeOverrides = shot.costumeOverrides as string | null | undefined;

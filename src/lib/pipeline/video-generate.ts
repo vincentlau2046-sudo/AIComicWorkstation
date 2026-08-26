@@ -13,7 +13,7 @@ import { getModelMaxDuration } from "@/lib/ai/model-limits";
 import { eq, inArray, asc, and } from "drizzle-orm";
 import type { Task } from "@/lib/task-queue";
 import { getActiveAsset, insertAssetVersion, stripCharHint } from "@/lib/shot-asset-utils";
-import { getEpisodeCharacters } from "@/lib/db/episode-characters";
+import { getEpisodeCharacters, assertEpisodeCharactersHaveReferences } from "@/lib/db/episode-characters";
 import { getUploadDir } from "@/lib/env";
 
 // ── Voice Line utilities ───────────────────────────────
@@ -100,6 +100,8 @@ export async function handleVideoGenerate(task: Task) {
   }
 
   const projectCharacters = await getEpisodeCharacters(payload.projectId ?? shot.projectId, shot.episodeId);
+  // ⑧ guard: Phase/Guest 行缺参考图 → 直接报错，倒逼先完成 D.2
+  await assertEpisodeCharactersHaveReferences(payload.projectId ?? shot.projectId, shot.episodeId);
 
   // Filter to only characters present in the frames
   const parseCharList = (raw: unknown): string[] => {

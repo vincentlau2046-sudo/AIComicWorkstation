@@ -11,7 +11,7 @@ import { shots } from "@/lib/db/schema";
 import { resolveAIProvider } from "@/lib/ai/provider-factory";
 import type { ModelConfigPayload } from "@/lib/ai/provider-factory";
 import { getActiveAssets } from "@/lib/shot-asset-utils";
-import { getEpisodeCharacters } from "@/lib/db/episode-characters";
+import { getEpisodeCharacters, assertEpisodeCharactersHaveReferences } from "@/lib/db/episode-characters";
 import { buildR2VPromptLLM } from "@/lib/ai/prompts/h3/r2v/builder";
 import { buildR2VPrompt } from "@/lib/ai/prompts/h3/r2v/ref-builder";
 import { resolvePrompt } from "@/lib/ai/prompts/resolver";
@@ -50,6 +50,13 @@ export async function handleRefVideoPromptGenerate(task: Task) {
 
   // 3. Load full context via buildH3Input (same as FL2V path)
   const projectCharacters = await getEpisodeCharacters(projectId, shot.episodeId);
+  // ⑧ guard: Phase/Guest 行缺参考图 → 直接报错（failTask），倒逼先完成 D.2
+  try {
+    await assertEpisodeCharactersHaveReferences(projectId, shot.episodeId);
+  } catch (err) {
+    await failTask(task.id, err instanceof Error ? err.message : "Character reference images missing");
+    return;
+  }
   const shotCharacters = projectCharacters.filter(c => c.referenceImage);
 
   const { buildH3Input } = await import("@/lib/ai/prompts/h3");
