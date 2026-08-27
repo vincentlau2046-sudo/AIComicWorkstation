@@ -15,7 +15,9 @@ export async function buildR2VPromptTemplate(
   let system = systemOverride || "";
   if (!system) {
     const slots = getDefaultSlotContents("ref_video_prompt_h3");
-    system = slots?.role_definition || slots?.rules || "";
+    const role = slots?.role_definition || "";
+    const rules = slots?.rules || "";
+    system = [role, rules].filter(Boolean).join("\n\n");
   }
   const user = [
     buildContentLayer(input, lang),
@@ -211,10 +213,18 @@ function buildOutputFormat(input: H3PromptInput, lang: H3Language): string {
 
 【1】subject_definitions:
 中文。为每个被引用的 Subject、Picture 各一行，标注 in <Picture N>。
-然后紧接着输出图片对齐声明：每个 <Picture N> 声明它在视频中的对齐时间点。
-格式: <Picture 1> (from [Shot 1]) aligns with the 0.00-second mark of the target video;
-     <Picture 2> (from [Shot 1]) aligns with the 0.00-second mark of the target video;
-     所有场景帧和角色参考图都嵌在同一镜头中。
+然后紧接着输出图片对齐声明。对齐时间 = 该参考图的关联内容在视频中**首次出现的时刻**。
+
+对齐规则（按 Picture 类型分别判定）：
+- 场景帧 (<Picture N=场景>)：始终对齐 0.00s。场景环境从视频第 0 秒就存在。
+- 角色参考图 (<Picture N=角色>)：对齐到该角色在视频中**首次出场的时间**。
+  判定方法：读上方「动作脚本」中的时间标注（如 "4-7秒：押解军汉出现在画面上方"）。
+  若角色从视频开始就出场 → 0.00s。若角色在第 4.0 秒才出现 → 4.00s。
+
+格式:
+  <Picture 1> (from [Shot 1]) aligns with the 0.00-second mark of the target video;   ← 场景帧
+  <Picture 2> (from [Shot 1]) aligns with the 4.00-second mark of the target video;   ← 角色第4秒出场
+  <Picture 3> (from [Shot 1]) aligns with the 0.00-second mark of the target video.   ← 角色第0秒出场
 
 【2】summary:
 中文。首行 [reference_generation]，一句话。
@@ -249,10 +259,18 @@ function buildOutputFormat(input: H3PromptInput, lang: H3Language): string {
 
 【1】subject_definitions:
 Chinese. One line per Subject/Picture, ending with "in <Picture N>".
-Then, immediately after, output picture alignment declarations: each <Picture N> declares its alignment timestamp in the target video.
-Format: <Picture 1> (from [Shot 1]) aligns with the 0.00-second mark of the target video;
-        <Picture 2> (from [Shot 1]) aligns with the 0.00-second mark of the target video;
-        All scene frames and character refs are embedded in the same shot.
+Then, immediately after, output picture alignment declarations. Alignment time = when the reference image's content FIRST APPEARS in the target video.
+
+Alignment rules (by Picture type):
+- Scene frame (<Picture N=scene>): always 0.00s. The environment is present from second 0.
+- Character ref (<Picture N=character>): aligns with the character's FIRST APPEARANCE in the video.
+  How to determine: read the "Motion Script" timestamps above (e.g., "4-7s: Guard appears above").
+  If the character appears from the start → 0.00s. If they enter at 4.0s → 4.00s.
+
+Format:
+  <Picture 1> (from [Shot 1]) aligns with the 0.00-second mark of the target video;   ← scene frame
+  <Picture 2> (from [Shot 1]) aligns with the 4.00-second mark of the target video;   ← character enters at 4s
+  <Picture 3> (from [Shot 1]) aligns with the 0.00-second mark of the target video.   ← character present from start
 
 【2】summary:
 Chinese. Start with [reference_generation]. One sentence.
