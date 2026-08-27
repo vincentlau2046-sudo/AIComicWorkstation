@@ -183,18 +183,18 @@ function buildRefConstraintLayer(input: H3PromptInput, lang: H3Language): string
   }
 
   const core: string[] = [];
-  core.push(r("core_format", L("【6-Section 格式】", "【6-Section Format】")));
-  core.push(r("core_subject", L("【Subject/Picture 闭环】", "【Subject/Picture Closure】")));
-  core.push(r("core_env", L("【环境-标签引用】", "【Environment-Reference】")));
+  core.push(r("core_format", L("[6-Section 格式]", "[6-Section Format]")));
+  core.push(r("core_subject", L("[Subject/Picture 闭环]", "[Subject/Picture Closure]")));
+  core.push(r("core_env", L("[环境-标签引用]", "[Environment-Reference]")));
 
   const detail: string[] = [];
-  detail.push(r("time_structure", L("【时间结构】", "【Time Structure】")));
-  detail.push(r("camera", L("【运镜优先】", "【Camera Priority】")));
-  detail.push(r("action_detail", L("【动作颗粒度】", "【Action Detail】")));
-  detail.push(r("body_vocab", L("【身体动词】", "【Body Vocab】")));
-  detail.push(r("spatial", L("【画面空间】", "【Spatial Layout】")));
-  detail.push(r("voice", L("【声音】", "【Voice】")));
-  detail.push(r("format", L("【格式】", "【Format】")));
+  detail.push(r("time_structure", L("[时间结构]", "[Time Structure]")));
+  detail.push(r("camera", L("[运镜优先]", "[Camera Priority]")));
+  detail.push(r("action_detail", L("[动作颗粒度]", "[Action Detail]")));
+  detail.push(r("body_vocab", L("[身体动词]", "[Body Vocab]")));
+  detail.push(r("spatial", L("[画面空间]", "[Spatial Layout]")));
+  detail.push(r("voice", L("[声音]", "[Voice]")));
+  detail.push(r("format", L("[格式]", "[Format]")));
 
   return L("=== 核心约束 — 必须严格遵守 ===", "=== CORE CONSTRAINTS ===") + "\n\n"
     + core.join("\n\n")
@@ -211,6 +211,10 @@ function buildOutputFormat(input: H3PromptInput, lang: H3Language): string {
 
 【1】subject_definitions:
 中文。为每个被引用的 Subject、Picture 各一行，标注 in <Picture N>。
+然后紧接着输出图片对齐声明：每个 <Picture N> 声明它在视频中的对齐时间点。
+格式: <Picture 1> (from [Shot 1]) aligns with the 0.00-second mark of the target video;
+     <Picture 2> (from [Shot 1]) aligns with the 0.00-second mark of the target video;
+     所有场景帧和角色参考图都嵌在同一镜头中。
 
 【2】summary:
 中文。首行 [reference_generation]，一句话。
@@ -245,6 +249,10 @@ function buildOutputFormat(input: H3PromptInput, lang: H3Language): string {
 
 【1】subject_definitions:
 Chinese. One line per Subject/Picture, ending with "in <Picture N>".
+Then, immediately after, output picture alignment declarations: each <Picture N> declares its alignment timestamp in the target video.
+Format: <Picture 1> (from [Shot 1]) aligns with the 0.00-second mark of the target video;
+        <Picture 2> (from [Shot 1]) aligns with the 0.00-second mark of the target video;
+        All scene frames and character refs are embedded in the same shot.
 
 【2】summary:
 Chinese. Start with [reference_generation]. One sentence.

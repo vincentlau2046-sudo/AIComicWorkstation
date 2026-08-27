@@ -482,23 +482,21 @@ export default function EpisodeStoryboardPage() {
       });
 
       if (!resp.ok) throw new Error("Failed");
-      const data = await resp.json();
+      const data = await resp.json() as { enqueued: number; taskIds: string[] };
 
-      const totalGenerated = data.results?.reduce((sum: number, r: any) => sum + (r.generated || 0), 0) || 0;
-      const totalFailed = data.results?.reduce((sum: number, r: any) => sum + (r.failed || 0), 0) || 0;
-
-      if (totalFailed > 0) {
-        toast.error(`${totalFailed} reference images failed`);
-      } else if (totalGenerated > 0) {
-        toast.success(`${totalGenerated} reference images generated`);
-      } else {
+      if (!data.enqueued || data.enqueued === 0) {
         toast.info("No pending reference images to generate");
+        setGeneratingRefImages(false);
+      } else {
+        toast.success(`已调度 ${data.enqueued} 个参考图任务，后台处理中`);
+        startTaskPolling(project.id, data.taskIds, () => {
+          setGeneratingRefImages(false);
+          toast.success(`${data.enqueued} 个参考图生成完成`);
+          fetchProject(project.id, currentEpisodeId || undefined);
+        });
       }
-
-      await fetchProject(project.id, currentEpisodeId || undefined);
     } catch (err) {
       toast.error("Batch reference image generation failed");
-    } finally {
       setGeneratingRefImages(false);
     }
   }

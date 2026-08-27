@@ -88,20 +88,25 @@ export function buildCharacterExtractPrompt(
   phasePool?: Array<{
     baseName: string;
     scope: string;
-    phases: Array<{ phaseName: string; episodeSequences: string }>;
-  }>
+    phases: Array<{ phaseName: string; episodeSequences: string; description?: string; visualHint?: string }>;
+  }>,
+  currentEpisodeSeq?: number,
 ): string {
   let phaseBlock = "";
   if (phasePool && phasePool.length > 0) {
     phaseBlock = phasePool.map(p => {
       const label = p.scope === "main" ? "主角" : p.scope === "guest" ? "配角" : "客串";
       const phaseList = p.phases
-        .map(ph => `${ph.phaseName} (EP${ph.episodeSequences})`)
+        .map(ph => `${ph.phaseName} (EP${ph.episodeSequences})${ph.description ? `: ${ph.description.slice(0, 60)}...` : ""}`)
         .join(", ");
       return `- ${p.baseName} [${label}] — ${phaseList}`;
     }).join("\n");
 
-    phaseBlock = `\n\n=== 已有 Phase 角色池 ===\n以下角色已在项目中存在视觉阶段。如果当前 EP 剧本中有这些角色出场，请使用相同的 baseName。如果是新出场的角色（不在以上列表中），标记 scope="support"。\n\n${phaseBlock}\n`;
+    const epHint = currentEpisodeSeq
+      ? `\n当前是 EP${currentEpisodeSeq}。对于 Phase 池中的每个角色：如果 EP 范围包含 EP${currentEpisodeSeq}，直接选用该 Phase；若无精确匹配，选择 EP 起始序号最接近 EP${currentEpisodeSeq} 的 Phase。必须从 Phase 池中复制所选 Phase 的 description 到输出的 description 字段，不要改写。`
+      : "";
+
+    phaseBlock = `\n\n=== 已有 Phase 角色池 ===\n以下角色已在项目中存在视觉阶段（包含完整的视觉规格 description）。如果剧本中有这些角色出场，你必须使用相同的 baseName，并从 Phase 池中复制对应的 description/visualHint。不在以上列表中的新出场角色标记 scope="support"。${epHint}\n\n${phaseBlock}\n`;
   }
 
   return `请为本集剧本中**有实质性出场**的角色创建视觉规格描述。${phaseBlock}\n\n--- 剧本 ---\n${screenplay}\n--- 结束 ---\n\n重要：输出语言必须与上方剧本的语言一致。`;

@@ -29,7 +29,7 @@ async function callAndValidateAgent(
     return NextResponse.json({ error: message }, { status: 422 });
   }
 }
-import { eq, asc, and, lt, gt, lte, gte, desc, or, isNull, isNotNull, inArray } from "drizzle-orm";
+import { eq, asc, and, lt, gt, lte, gte, desc, or, isNull, isNotNull, inArray, sql } from "drizzle-orm";
 import { getUserIdFromRequest } from "@/lib/get-user-id";
 import path from "path";
 import { id as genId } from "@/lib/id";
@@ -191,6 +191,9 @@ export async function POST(
   }
 
   if (action === "character_extract") {
+    if (episodeId) {
+      return handleEpisodeCharacterExtract(projectId, userId, modelConfig, episodeId);
+    }
     return handleCharacterExtract(projectId, userId, modelConfig, episodeId);
   }
 
@@ -1111,6 +1114,333 @@ async function handleCharacterExtract(
   return NextResponse.json({ characters: rawChars });
 }
 
+/**
+ * Parse episode_sequences field into an array of numbers.
+ * Handles both comma-separated ("1,3,5") and range ("7-9") formats.
+ */
+function parseEpisodeSequences(raw: string | null | undefined): number[] {
+  if (!raw) return [];
+  const numbers: number[] = [];
+  const parts = raw.split(",");
+  for (const part of parts) {
+    const trimmed = part.trim();
+    if (trimmed.includes("-")) {
+      const [start, end] = trimmed.split("-").map(Number);
+      if (!isNaN(start) && !isNaN(end)) {
+        for (let i = start; i <= end; i++) numbers.push(i);
+      }
+    } else {
+      const n = Number(trimmed);
+      if (!isNaN(n)) numbers.push(n);
+    }
+  }
+  return numbers;
+}
+
+// --- EP character extract: link episode characters to existing Phases only ---
+
+/**
+ * EP-level character extraction.
+ * Does NOT create or modify Template rows. Only links the episode to
+ * existing Phase rows (via episode_characters). Characters not in the
+ * Phase pool become Support rows.
+ *
+ * Phase selection: exact EP-range match → nearest-distance fallback.
+ */
+async function handleEpisodeCharacterExtract(
+  projectId: string,
+  userId: string,
+  modelConfig?: ModelConfig,
+  episodeId?: string
+) {
+  // ─── Guard: must be EP-scoped ───
+  if (!episodeId) {
+    return NextResponse.json({ error: "episodeId required for EP character extract" }, { status: 400 });
+  }
+
+  const [episode] = await db
+    .select()
+    .from(episodes)
+    .where(eq(episodes.id, episodeId));
+  if (!episode?.script) {
+    return NextResponse.json({ error: "Script not found for this episode" }, { status: 404 });
+  }
+
+  const epSeq = episode.sequence;
+
+  // ─── Step 1: Query Phase pool only — exclude "默认" fallback phases ───
+  const phases = await db
+    .select()
+    .from(characters)
+    .where(and(
+      eq(characters.projectId, projectId),
+      isNull(characters.episodeId),
+      isNotNull(characters.phaseName),
+      sql`${characters.phaseName} != '默认'`
+    ));
+
+  // ─── Step 2: Build phasePool for LLM prompt (include description/visualHint) ───
+  const phasePool = phases.reduce((acc, ph) => {
+    const existing = acc.find(r => r.baseName === ph.baseName);
+    if (existing) {
+      existing.phases.push({
+        phaseName: ph.phaseName || "",
+        episodeSequences: ph.episodeSequences || "",
+        description: ph.description || "",
+        visualHint: ph.visualHint || "",
+      });
+    } else if (ph.baseName) {
+      acc.push({
+        baseName: ph.baseName,
+        scope: ph.scope,
+        phases: [{
+          phaseName: ph.phaseName || "",
+          episodeSequences: ph.episodeSequences || "",
+          description: ph.description || "",
+          visualHint: ph.visualHint || "",
+        }],
+      });
+    }
+    return acc;
+  }, [] as Array<{
+    baseName: string; scope: string;
+    phases: Array<{ phaseName: string; episodeSequences: string; description: string; visualHint: string }>;
+  }>);
+
+  // ─── Step 3: Inject visual style + era context ───
+  let script = episode.script;
+  const projStyle = await db
+    .select({
+      visualStyle: projects.visualStyle,
+      eraAesthetic: projects.eraAesthetic,
+    })
+    .from(projects)
+    .where(eq(projects.id, projectId))
+    .then(r => r[0]);
+
+  const vs = episode.visualStyle || projStyle?.visualStyle;
+  const era = episode.eraAesthetic || projStyle?.eraAesthetic;
+
+  if (vs || era) {
+    script = [
+      `【项目风格锚定 — t2iStructure 的 era/style 字段必须使用以下值，不要自行推断】`,
+      vs ? `视觉风格: ${vs}` : '',
+      era ? `时代美学: ${era}` : '',
+      ``,
+      script,
+    ].filter(Boolean).join('\n');
+  }
+
+  // ─── Step 4: Call LLM ───
+  let aiText: string;
+  const boundAgent = await findBoundAgent(projectId, "character_extract");
+  if (boundAgent) {
+    const agentResult = await callAndValidateAgent(
+      boundAgent, "character_extract",
+      buildCharacterExtractPrompt(script, phasePool.length > 0 ? phasePool : undefined, epSeq)
+    );
+    if (agentResult instanceof NextResponse) return agentResult;
+    aiText = agentResult.text;
+  } else {
+    if (!modelConfig?.text) {
+      return NextResponse.json({ error: "No text model configured" }, { status: 400 });
+    }
+    const model = createLanguageModel(modelConfig.text);
+    const charExtractSystem = await resolvePrompt("character_extract", { userId, projectId });
+    const { text } = await generateText({
+      model,
+      system: charExtractSystem,
+      prompt: buildCharacterExtractPrompt(script, phasePool.length > 0 ? phasePool : undefined, epSeq),
+    });
+    aiText = text;
+  }
+
+  const parsed = parseLLMJSON(aiText);
+  const rawChars: any[] = Array.isArray(parsed) ? parsed : (parsed.characters || []);
+  console.log(`[EpCharExtract] LLM returned ${rawChars.length} chars`);
+
+  // ─── Step 5: Clear old episode_characters links ───
+  const oldLinks = await db
+    .select({ characterId: episodeCharacters.characterId })
+    .from(episodeCharacters)
+    .where(eq(episodeCharacters.episodeId, episodeId));
+  const oldEpisodeCharIds = oldLinks.map(l => l.characterId);
+  await db.delete(episodeCharacters).where(eq(episodeCharacters.episodeId, episodeId));
+
+  // ─── Step 6: Process each LLM-returned character ───
+  let linkedCount = 0;
+  let supportCount = 0;
+  const linkedCharIds = new Set<string>();
+
+  for (const raw of rawChars) {
+    const baseName = raw.baseName || raw.name || "";
+
+    // ─── Look up Phase pool candidates ───
+    const candidatePhases = phases.filter(p => p.baseName === baseName);
+
+    if (candidatePhases.length > 0) {
+      // ─── Character in Phase pool → pick best Phase ───
+      let bestPhase: typeof phases[number] | null = null;
+      let bestDist = Infinity;
+
+      for (const p of candidatePhases) {
+        const seqs = parseEpisodeSequences(p.episodeSequences);
+        for (const s of seqs) {
+          if (s === epSeq) {
+            bestPhase = p;
+            bestDist = 0;
+            break; // exact match — stop searching
+          }
+          const dist = Math.abs(s - epSeq);
+          if (dist < bestDist) {
+            bestDist = dist;
+            bestPhase = p;
+          }
+        }
+        if (bestDist === 0) break; // found exact match across phases
+      }
+
+      if (bestPhase) {
+        await db.insert(episodeCharacters).values({
+          id: genId(),
+          episodeId,
+          characterId: bestPhase.id,
+        });
+        linkedCharIds.add(bestPhase.id);
+        linkedCount++;
+        console.log(`[EpCharExtract] ${baseName} → Phase "${bestPhase.phaseName}" (dist=${bestDist})`);
+      } else {
+        console.warn(`[EpCharExtract] ${baseName}: candidate phases found but none matched`);
+      }
+    } else {
+      // ─── Character NOT in Phase pool → Support row ───
+
+      // Dedup: check if a Support row for this (baseName, episodeId) already exists
+      const [existingSupport] = await db
+        .select()
+        .from(characters)
+        .where(and(
+          eq(characters.projectId, projectId),
+          eq(characters.baseName, baseName),
+          eq(characters.episodeId, episodeId),
+          eq(characters.scope, "support")
+        ));
+
+      // Extract description and t2iStructure from episodes array if present
+      const epEntry = raw.episodes?.[0];
+      const supportDesc = epEntry?.description || raw.description || "";
+      const supportHint = epEntry?.visualHint || raw.visualHint || "";
+      const supportT2i = epEntry?.t2iStructure || raw.t2iStructure;
+
+      let supportId: string;
+      if (existingSupport) {
+        supportId = existingSupport.id;
+        // Update existing Support row with fresh data
+        await db.update(characters).set({
+          description: supportDesc,
+          visualHint: supportHint,
+          t2iStructure: supportT2i ? JSON.stringify(supportT2i) : null,
+          performanceStyle: raw.personality || "",
+        }).where(eq(characters.id, supportId));
+        console.log(`[EpCharExtract] ${baseName}: updated existing Support row ${supportId}`);
+      } else {
+        supportId = genId();
+        await db.insert(characters).values({
+          id: supportId,
+          projectId,
+          baseName,
+          name: baseName,
+          description: supportDesc,
+          visualHint: supportHint,
+          t2iStructure: supportT2i ? JSON.stringify(supportT2i) : null,
+          performanceStyle: raw.personality || "",
+          scope: "support",
+          episodeId,
+          episodeSequences: String(epSeq),
+          episodeStart: epSeq,
+          episodeEnd: epSeq,
+        });
+        console.log(`[EpCharExtract] ${baseName}: created Support row ${supportId}`);
+      }
+
+      await db.insert(episodeCharacters).values({
+        id: genId(),
+        episodeId,
+        characterId: supportId,
+      });
+      linkedCharIds.add(supportId);
+      supportCount++;
+    }
+  }
+
+  // ─── Step 7: Relationships (episode-scoped, same logic as project-level) ───
+  const extractedRelations: Array<{
+    characterA: string;
+    characterB: string;
+    relationType: string;
+    description?: string;
+  }> = Array.isArray(parsed) ? [] : (parsed.relationships || []);
+
+  if (extractedRelations.length > 0) {
+    // Clear existing relations scoped to this episode's characters
+    if (oldEpisodeCharIds.length > 0) {
+      await db
+        .delete(characterRelations)
+        .where(and(
+          eq(characterRelations.projectId, projectId),
+          inArray(characterRelations.characterAId, oldEpisodeCharIds),
+          inArray(characterRelations.characterBId, oldEpisodeCharIds)
+        ));
+    }
+
+    const allChars = await db
+      .select()
+      .from(characters)
+      .where(eq(characters.projectId, projectId));
+    const baseNameToIds = new Map<string, string[]>();
+    for (const c of allChars) {
+      const bn = (c.baseName || c.name).toLowerCase().trim();
+      if (!baseNameToIds.has(bn)) baseNameToIds.set(bn, []);
+      baseNameToIds.get(bn)!.push(c.id);
+    }
+    const nameToId = new Map(allChars.map(c => [c.name, c.id]));
+
+    let relCount = 0;
+    for (const rel of extractedRelations) {
+      const aBN = rel.characterA.toLowerCase().trim();
+      const bBN = rel.characterB.toLowerCase().trim();
+      const aIds = baseNameToIds.get(aBN)
+        || (nameToId.has(rel.characterA) ? [nameToId.get(rel.characterA)!] : []);
+      const bIds = baseNameToIds.get(bBN)
+        || (nameToId.has(rel.characterB) ? [nameToId.get(rel.characterB)!] : []);
+      const aId = aIds.length > 0 ? aIds[0] : undefined;
+      const bId = bIds.length > 0 ? bIds[0] : undefined;
+      if (aId && bId && aId !== bId) {
+        try {
+          await db.insert(characterRelations).values({
+            id: genId(),
+            projectId,
+            characterAId: aId,
+            characterBId: bId,
+            relationType: rel.relationType || "neutral",
+            description: rel.description || "",
+          });
+          relCount++;
+        } catch {
+          // duplicate — skip
+        }
+      }
+    }
+    console.log(`[EpCharExtract] Created ${relCount} relations`);
+  }
+
+  console.log(
+    `[EpCharExtract] ${rawChars.length} chars: ${linkedCount} linked to phases, ${supportCount} supports, ${extractedRelations.length} relations`
+  );
+
+  return NextResponse.json({ characters: rawChars });
+}
+
 // --- single_character_image: generate turnaround image for one character ---
 
 async function handleSingleCharacterImage(
@@ -1154,11 +1484,12 @@ async function handleSingleCharacterImage(
     let visualChanges: Record<string, string> = {};
     try { visualChanges = JSON.parse(character.visualChanges || "{}"); } catch {}
 
-    const phasePrompt = character.r2iStructure || buildPhaseR2IPrompt({
+    const phasePrompt = buildPhaseR2IPrompt({
       characterName: character.baseName,
       phaseName: character.phaseName,
       visualChanges,
       templateDescription: template.description || "",
+      r2iPrompt: character.r2iStructure || undefined,
     });
 
     try {
@@ -1183,7 +1514,11 @@ async function handleSingleCharacterImage(
   }
 
   // ═══ Template 和 Guest 共用 T2I 路径 ═══
-  const prompt = buildCharacterFrontViewPrompt(character.t2iStructure ?? null, character.description || character.name);
+  // Template 行：只用 name（description 含弧线迁移内容）；Phase/Guest 行：description 已是阶段专用
+  const promptDesc = !character.phaseName
+    ? character.name
+    : (character.description || character.name);
+  const prompt = buildCharacterFrontViewPrompt(character.t2iStructure ?? null, promptDesc);
 
   try {
     const rawImagePath = await ai.generateImage(prompt, {
@@ -1315,11 +1650,12 @@ async function handleSinglePhaseImage(
   try { visualChanges = JSON.parse(phase.visualChanges || "{}"); } catch {}
 
   const ai = resolveImageProvider(modelConfig);
-  const prompt = phase.r2iStructure || buildPhaseR2IPrompt({
+  const prompt = buildPhaseR2IPrompt({
     characterName: phase.baseName,
     phaseName: phase.phaseName!,
     visualChanges,
     templateDescription: template.description || "",
+    r2iPrompt: phase.r2iStructure || undefined,
   });
   try {
     const rawImagePath = await ai.generateImage(prompt, {
@@ -1407,11 +1743,12 @@ async function handleBatchCharacterImage(
           let visualChanges: Record<string, string> = {};
           try { visualChanges = JSON.parse(character.visualChanges || "{}"); } catch {}
 
-          const phasePrompt = character.r2iStructure || buildPhaseR2IPrompt({
+          const phasePrompt = buildPhaseR2IPrompt({
             characterName: character.baseName,
             phaseName: character.phaseName,
             visualChanges,
             templateDescription: template.description || "",
+            r2iPrompt: character.r2iStructure || undefined,
           });
 
           const rawImagePath = await ai.generateImage(phasePrompt, {

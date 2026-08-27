@@ -666,6 +666,8 @@ const CHAR_EXTRACT_OUTPUT_FORMAT = `═══ 输出格式 ═══
           "visualHint": "该集2-4字视觉标识符（如 青衣杏眼、古铜方脸明黄衮服）",
           "description": "该集的完整视觉规格（含年龄/服饰/状态变化）——单段落",
           "t2iStructure": {
+            "era": "时代锚定（如 '明代洪武年间'），从项目风格上下文中获取",
+            "style": "视觉风格锚定（如 '写实电影摄影'），从项目风格上下文中获取",
             "age": "年龄描述（如 25岁，精瘦结实 或 71岁，体弱衰老，皱纹深刻）",
             "subject": "主体：性别+身高+体型关键词（中文），如 男，162cm，精瘦，微佝偻，步履缓慢",
             "body": "体态细节：骨骼标志物、姿势、肌肉/脂肪状态（中文）",
@@ -840,10 +842,18 @@ const CHAR_EXTRACT_WRITING_RULES = `═══ 书写规则 ═══
 
 这样下游分镜生成时 LLM 能自动把这些标志性动作用到具体镜头的 motionScript 里，而角色设定图本身保持中性站立，可复用、可一致。
 
-═══ t2iStructure 结构化字段书写规则（T2I专用，值用中文，7个字段缺一不可）═══
+═══ t2iStructure 结构化字段书写规则（T2I专用，值用中文，9个字段缺一不可）═══
 
-t2iStructure 是直接传给 Qwen Image 2512 生成角色设定图的prompt。标签名沿用英文（[age]/[subject]等是Qwen训练集中的高频结构），
+t2iStructure 是直接传给 Qwen Image 2512 生成角色设定图的prompt。标签名沿用英文（[era]/[style]/[age]/[subject]等是Qwen训练集中的高频结构），
 但字段值必须使用中文——避免英文体型词映射到西方人脸特征。
+
+【era】时代锚定（项目级固定值——从 user prompt 的【项目风格锚定】中获取）:
+  - 值必须与项目风格锚定中的"时代美学"完全一致，如"明代洪武年间"、"1960年代老上海"
+  - 所有角色共用同一个 era 值，不要自行推断或改写
+
+【style】视觉风格锚定（项目级固定值——从 user prompt 的【项目风格锚定】中获取）:
+  - 值必须与项目风格锚定中的"视觉风格"完全一致，如"写实电影摄影"、"3D国漫渲染"
+  - 所有角色共用同一个 style 值，不要自行推断或改写
 
 【age】年龄锚定（Per-EP变体核心——同一角色不同EP年龄不同）:
   - 少年/青年: 显式年龄范围 + 发育特征（如 "17岁，正在发育，体型偏瘦"）
@@ -893,21 +903,31 @@ const CHAR_EXTRACT_LANGUAGE_RULES = `【关键语言规则】所有字段必须�
 
 const CHAR_EXTRACT_PHASE_POOL_RULES = `═══ Phase 角色池匹配（比角色筛选规则优先级更高）═══
 
-你会在 user prompt 的「已有 Phase 角色池」中看到项目中已存在的角色和它们的视觉阶段列表。
+你在 EP 角色提取模式下工作。Phase 池中是项目中已有的角色视觉阶段。当前 EP 的序号已在 user prompt 中标注。
 
-【匹配已有角色】
-- 如果剧本中的角色名与 Phase 池中的 baseName 匹配，你必须使用完全相同的 baseName
-- 不要为已有角色重新生成完整的视觉规格 description——下游已有 Template 定义
-- 对于已有角色，description 可以简写为角色名（如 "朱元璋"），不需要再从剧本推断外貌
-- visualHint 保持与 Phase 池一致或简短更新
+【匹配已有角色 — 核心规则】
+如果剧本中的角色名与 Phase 池中的某个 baseName 匹配：
+- 你必须使用完全相同的 baseName
+- 从 Phase 池中为该角色选择一个最合适的 Phase（选择规则见下方）
+- 在输出的 episodes[].visualHint 中写入所选 Phase 的 phaseName
+- description 字段填入所选 Phase 的 description（从 Phase 池中原样复制，不要改写）
+- visualHint 保持与所选 Phase 一致
+- 不要重新推断角色的外貌/服饰/年龄——Phase 描述已是权威视觉定义，下游渲染依赖它
+
+【Phase 选择优先级】
+- P1 精确匹配: 当前 EP 的序号在某个 Phase 的 EP 范围内 → 直接选用该 Phase
+- P2 最近匹配: 当前 EP 不在任何 Phase 范围内 → 选择 EP 起始序号最接近当前 EP 的 Phase
+  （例：EP01 需要王二柱，Phase 池有「忠诚之盾 EP3-20」和「精锐统领 EP33-67」→ 选「忠诚之盾」，因为 3 比 33 更接近 1）
+- P3 无 Phase: 该 baseName 在 Phase 池中完全没有任何 Phase 行 → 视为新角色处理
 
 【新角色标记】
-- 如果角色不在 Phase 池中，标记 scope="support"
-- support 角色需要完整的 description（因为下游没有 Template 定义可用）
+- 如果角色 baseName 在 Phase 池中完全找不到（P3 情况），标记 scope="support"
+- support 角色同样使用 episodes 数组结构，episodes[0] 中填写完整的 description 和 t2iStructure（因为下游没有 Phase 视觉定义可用，必须从剧本中推断并生成）
+- support 角色的 t2iStructure 必须包含 era 和 style 字段（共 9 字段），era/style 值从项目风格锚定上下文获取，不要自行推断
 
-【scope 判定补充】
+【scope 判定】
 - Phase 池中的角色保持其原有 scope（main/guest），不要改变
-- 新角色默认为 support，除非明显是核心角色`;
+- 新角色 scope="support"`;
 
 const CHAR_EXTRACT_ROLE_DEFINITION_EN = `You are a senior character designer, director of photography, and art director. Your character descriptions are the sole authoritative visual reference fed directly into the AI image generator. Every word you write determines how the character looks — be precise, concrete, and visual.`;
 const CHAR_EXTRACT_STYLE_DETECTION_EN = `═══ Step 1 — Identify the visual style ═══
@@ -918,14 +938,21 @@ Detect the style declared or implied by the script:
 - "2D cartoon" → describe as cartoon illustration
 The style must appear in every character description.`;
 const CHAR_EXTRACT_PHASE_POOL_RULES_EN = `═══ Phase character-pool matching (higher priority than the filtering rules) ═══
-You will see the project's existing characters and their visual-phase list in the user prompt's "existing Phase character pool".
+You are in EP character-extraction mode. The Phase pool contains the project's existing character visual phases. The current EP number is given in the user prompt.
+
 [Matching existing characters]
-- If a script character's name matches a baseName in the pool, reuse that exact baseName
-- Do not regenerate a full visual spec for existing characters — a downstream template already defines them
-- For existing characters the description may just be the character name; keep visualHint consistent with the pool
+- If a script character's name matches a baseName in the pool:
+  You must reuse that exact baseName, pick the most suitable Phase from the pool, and copy its description/visualHint verbatim. Do not re-infer the character's appearance — the Phase description is the authoritative visual definition.
+
+[Phase selection priority]
+- P1 exact: the current EP is inside a Phase's EP range → use that Phase
+- P2 nearest: no Phase covers the current EP → pick the Phase whose first EP is closest to the current EP
+- P3 no Phase: the baseName has zero Phase rows in the pool → treat as a new character
+
 [Marking new characters]
-- Characters not in the pool get scope="support" and need a full description
-- Keep existing characters' original scope (main/guest); new characters default to support unless clearly central.`;
+- Characters whose baseName is not in the pool at all (P3) get scope="support"
+- Support characters also use the episodes array structure; fill episodes[0] with a full description and t2iStructure (since no Phase visual definition exists — you must infer from the script and generate them)
+- Keep existing characters' original scope (main/guest); new characters are support`;
 const CHAR_EXTRACT_OUTPUT_FORMAT_EN = `═══ Output format ═══
 Return a JSON object only — no markdown fences, no comments:
 { "characters": [ { "name", "baseName", "scope", "personality", "episodes": [ { "episodeIndex", "visualHint", "description", "t2iStructure": { age, subject, body, face, hair, clothing, lighting } } ] ], "relationships": [ { "characterA", "characterB", "relationType", "description" } ] }`;
@@ -1622,6 +1649,7 @@ const ENRICH_PHASES_ROLE_ZH = `你是一位角色设计师。基于剧情上下�
 - description（视觉角色卡）：见下方「description 写作规则」。
 - visualHint：2-4 词的外貌标识符（描述外貌而非动作，如「龙袍金冠阴沉脸」）。
 - t2iStructure：7 字段 JSON（age/subject/body/face/hair/clothing/lighting，英文标签，字段值随语言），对齐 batch-generate。
+- visualChanges：8 字段 JSON（age/facial/clothing/hair/accessories/expression/posture/lighting，英文标签），仅描述该阶段与基准的差异（增量）。见下方「visualChanges 写作规则」。
 - heightCm：合理整数身高（cm）。
 - bodyType：体型（如 slim/average/athletic/stocky）。
 若现有 description 为空或质量不足，请从专业视角重新生成，而非简单追加。`;
@@ -1629,6 +1657,7 @@ const ENRICH_PHASES_ROLE_EN = `You are a character designer. Using the episode c
 - description (visual character card): see the "description writing rules" below.
 - visualHint: a 2-4 word APPEARANCE identifier (describes appearance, not actions; e.g. "龙袍金冠阴沉脸" / "silver hair red coat").
 - t2iStructure: 7-field JSON (age/subject/body/face/hair/clothing/lighting; English tags, values follow the language), aligned with batch-generate.
+- visualChanges: 8-field JSON (age/facial/clothing/hair/accessories/expression/posture/lighting; English tags). Only describe deltas from baseline. See "visualChanges writing rules" below.
 - heightCm: reasonable integer height in cm.
 - bodyType: body build (slim/average/athletic/stocky, etc.).
 If the existing description is empty or low quality, regenerate it from a professional perspective rather than simply appending.`;
@@ -1656,6 +1685,7 @@ const ENRICH_PHASES_OUTPUT_ZH = `只输出 JSON：
       "description": "视觉角色卡（含足部）",
       "visualHint": "2-4词外貌标识",
       "t2iStructure": { "age": "...", "subject": "...", "body": "...", "face": "...", "hair": "...", "clothing": "...", "lighting": "..." },
+      "visualChanges": { "age": "...", "facial": "...", "clothing": "...", "hair": "...", "accessories": "...", "expression": "...", "posture": "...", "lighting": "..." },
       "heightCm": 175,
       "bodyType": "athletic"
     }
@@ -1668,6 +1698,7 @@ const ENRICH_PHASES_OUTPUT_EN = `Output JSON only:
       "description": "visual character card (with footwear)",
       "visualHint": "2-4 word appearance identifier",
       "t2iStructure": { "age": "...", "subject": "...", "body": "...", "face": "...", "hair": "...", "clothing": "...", "lighting": "..." },
+      "visualChanges": { "age": "...", "facial": "...", "clothing": "...", "hair": "...", "accessories": "...", "expression": "...", "posture": "...", "lighting": "..." },
       "heightCm": 175,
       "bodyType": "athletic"
     }
@@ -1675,6 +1706,28 @@ const ENRICH_PHASES_OUTPUT_EN = `Output JSON only:
 
 const ENRICH_PHASES_LANG_ZH = `语言规则：始终使用与用户输入相同的语言撰写。用户用中文则全部中文，用英文则全部英文。`;
 const ENRICH_PHASES_LANG_EN = `Language rules: always write in the same language as the user's input.`;
+
+const ENRICH_PHASES_VISUAL_CHANGES_ZH = `visualChanges 写作规则（仅增量）：
+每个字段只写本阶段相较基准的变化。没变的字段用空字符串。
+- age: 仅年龄段数字，例"16-18岁"。不含场景。
+- facial: 仅面部的年龄物理变化（皱纹/皮肤质地）。不重新写面型/肤色/五官。
+- clothing: 完整服装——上装+下装+鞋履。格式："上装xxx, 下装xxx, 穿着xxx靴/鞋"。
+- hair: 仅发型描述，不含临时状态。
+- accessories: 仅手持/随身物品，不准含大型道具。
+- expression: 仅该阶段的支配性表情/气质。
+- posture: 仅站姿体态（挺拔/微躬/放松）。不准含动作。
+- lighting: 光照变化描述。与基准一致则输出空字符串。`;
+
+const ENRICH_PHASES_VISUAL_CHANGES_EN = `visualChanges writing rules (delta only):
+Each field only describes what changed from baseline. Use empty string if unchanged.
+- age: age range only, e.g. "16-18 years". No scene.
+- facial: ONLY age-related face changes (wrinkles, skin texture). Do NOT re-describe face shape/skin tone/features.
+- clothing: FULL outfit — top + bottom + footwear. Format: "top, bottom, boots/shoes".
+- hair: hairstyle only, no temporary states.
+- accessories: held/carried items only. No large props.
+- expression: dominant expression/demeanor for this phase.
+- posture: standing pose only (straight/hunched/relaxed). NO actions.
+- lighting: lighting change. Empty string if same as baseline.`;
 
 const enrichPhasesDef: PromptDefinition = {
   key: "enrich_phases",
@@ -1684,23 +1737,46 @@ const enrichPhasesDef: PromptDefinition = {
   slots: [
     slot("role_definition", ENRICH_PHASES_ROLE_ZH, true, ENRICH_PHASES_ROLE_EN),
     slot("description_rules", ENRICH_PHASES_DESC_RULES_ZH, true, ENRICH_PHASES_DESC_RULES_EN),
+    slot("visual_changes_rules", ENRICH_PHASES_VISUAL_CHANGES_ZH, false, ENRICH_PHASES_VISUAL_CHANGES_EN),
     slot("output_format", ENRICH_PHASES_OUTPUT_ZH, false, ENRICH_PHASES_OUTPUT_EN),
     slot("language_rules", ENRICH_PHASES_LANG_ZH, false, ENRICH_PHASES_LANG_EN),
   ],
   buildFullPrompt(sc) {
     const s = this.slots;
     const r = (k: string) => resolve(sc, s, k);
-    return [r("role_definition"), "", r("description_rules"), "", r("output_format"), "", r("language_rules")].join("\n");
+    return [r("role_definition"), "", r("description_rules"), "", r("visual_changes_rules"), "", r("output_format"), "", r("language_rules")].join("\n");
   },
 };
 
-const T2I_PROMPT_TASK_ZH = `根据角色档案（description + visualHint），生成该角色的 t2iStructure JSON。输出必须是 JSON 对象，含 7 个字段：age/subject/body/face/hair/clothing/lighting。标签名用英文，字段值用中文。必须保留 description 中的风格/材质/光照提示（如 3D 国漫渲染风格、细腻材质、体积光）。只返回 JSON。`;
-const T2I_PROMPT_TASK_EN = `From the character profile (description + visualHint), generate the character's t2iStructure JSON. Output MUST be a JSON object with 7 fields: age/subject/body/face/hair/clothing/lighting. Tag names in English, field values in the source language. Preserve the style/material/lighting hints from the description. Return JSON only.`;
+const T2I_PROMPT_TASK_ZH = `根据角色档案生成 t2iStructure JSON。只返回 9 字段 JSON 对象：
+era/style/age/subject/body/face/hair/clothing/lighting。
+标签名英文，字段值中文。
 
-const T2I_PROMPT_OUTPUT_ZH = `只返回 JSON 对象（7 字段）：
-{ "age": "...", "subject": "...", "body": "...", "face": "...", "hair": "...", "clothing": "...", "lighting": "..." }`;
-const T2I_PROMPT_OUTPUT_EN = `Return a JSON object (7 fields) only:
-{ "age": "...", "subject": "...", "body": "...", "face": "...", "hair": "...", "clothing": "...", "lighting": "..." }`;
+【字段隔离铁律 — 违反即判定为不合格】
+1. era 和 style 必须是 JSON 的前两个字段，值从 PROJECT STYLE ANCHORS 获取。
+2. subject 只写角色本体（身份/职业/气质），严禁包含风格渲染词。
+3. clothing/lighting 只写穿着/光照，严禁包含风格渲染词。
+4. 禁止在 age/subject/body/face/hair/clothing/lighting 中出现：
+   "3D国漫渲染"、"体积光"、"细腻材质"、"渲染"、"CG"、"风格"等词汇。
+   这些词汇只允许出现在 era 和 style 字段。
+只返回 JSON。`;
+const T2I_PROMPT_TASK_EN = `From the character profile, generate a t2iStructure JSON. Return a 9-field JSON object only:
+era/style/age/subject/body/face/hair/clothing/lighting.
+Tag names in English, field values in source language.
+
+【Field Isolation Rules — violation = FAIL】
+1. era and style MUST be the first two fields; values from PROJECT STYLE ANCHORS.
+2. subject: character identity only (role/occupation/demeanor). NO style/rendering words.
+3. clothing/lighting: clothing/lighting description only. NO style/rendering words.
+4. BANNED from age/subject/body/face/hair/clothing/lighting:
+   "3D CG"， "Cinematic"， "volumetric light"， "fine material"， and similar rendering terms.
+   These words belong ONLY in era and style fields.
+Return JSON only.`;
+
+const T2I_PROMPT_OUTPUT_ZH = `只返回 JSON 对象（9 字段）。era/style 是样式锚定字段，subject/body/face/hair/clothing/lighting 是角色描述字段，两者严格隔离互不污染：
+{ "era": "...", "style": "...", "age": "...", "subject": "...", "body": "...", "face": "...", "hair": "...", "clothing": "...", "lighting": "..." }`;
+const T2I_PROMPT_OUTPUT_EN = `Return a JSON object (9 fields) only. era/style are style anchors, subject/body/face/... are character description — strictly separated, no cross-contamination:
+{ "era": "...", "style": "...", "age": "...", "subject": "...", "body": "...", "face": "...", "hair": "...", "clothing": "...", "lighting": "..." }`;
 
 const T2I_PROMPT_LANG_ZH = `语言规则：字段值使用与角色档案相同的语言。`;
 const T2I_PROMPT_LANG_EN = `Language rules: field values use the same language as the character profile.`;
@@ -1722,8 +1798,97 @@ const t2iPromptDef: PromptDefinition = {
   },
 };
 
-const R2I_ROLE_ZH = `你是一位角色一致性专家。给定角色名 + 阶段名 + 外观变化，生成该阶段的 R2I 提示词（参考图提示词）。`;
-const R2I_ROLE_EN = `You are a character-consistency specialist. Given the character name + phase name + appearance changes, generate the R2I prompt (reference-image prompt) for that phase.`;
+const R2I_TASK_ZH = `根据 Template 基准与阶段视觉变更的对比，生成该阶段的 R2I 提示词。输出为格式化的自然文本（非 JSON），要求：
+1. 以 "Picture 1" 开头。
+2. 输出必须包含以下固定构图约束行（方括号标签用英文）：
+[character design sheet] [front view] [full body] [standing pose]
+[pose: neutral standing, arms at sides, feet shoulder-width apart, neutral expression]
+[environment: pure white background, no shadow]
+[quality: sharp focus, high detail, character reference sheet]
+[lighting: 3D国漫渲染风格, 柔和体积光, 细腻材质]
+3. 然后按固定格式输出变更字段，每行格式为 "field: value"。只写本阶段与基准的差异，没变的字段整行跳过。
+3a. 在变更字段之前，必须输出项目时代锚定（值从用户消息 PROJECT STYLE ANCHORS 的「时代美学」和「视觉风格」字段获取）：
+[era: 明代中国]
+[style: 3D国漫渲染]
+上面的 "明代中国" 和 "3D国漫渲染" 仅为示例，请替换为 PROJECT STYLE ANCHORS 中的实际值。
+4. 结尾固定为 "All other features match the reference."
+5. 禁止完整描述角色、禁止重复基准中已有的特征描述、禁止临时状态（汗水/泪痕/风吹等）。`;
+
+const R2I_TASK_EN = `Based on the Template baseline and phase visual changes, generate the R2I prompt for this phase. Output formatted natural text (not JSON). Requirements:
+1. Start with "Picture 1".
+2. Include fixed composition constraint lines with English bracket tags:
+[character design sheet] [front view] [full body] [standing pose]
+[pose: neutral standing, arms at sides, feet shoulder-width apart]
+[environment: pure white background, no shadow]
+[quality: sharp focus, high detail, character reference sheet]
+[lighting: 3D国漫渲染风格, 柔和体积光, 细腻材质]
+3. Then output changed fields in "field: value" format. Only describe what differs from baseline.
+3a. Before changed fields, output era anchors (get values from PROJECT STYLE ANCHORS in user message):
+[era: Ming Dynasty China]
+[style: 3D Chinese Animation CG]
+The values above are examples only. Replace with actual values from PROJECT STYLE ANCHORS.
+4. End with "All other features match the reference."
+5. Do NOT re-describe baseline features. Do NOT include temporary states (sweat, tears, wind-blown hair).`;
+
+const R2I_OUTPUT_ZH = `严格按照以下模板输出。没有变化的整行跳过。
+
+第一段——构图硬约束（此行必须输出）：
+[character design sheet] [front view] [full body] [standing pose]
+[pose: neutral standing, arms at sides, feet shoulder-width apart, neutral expression]
+[environment: pure white background, no shadow]
+[quality: sharp focus, high detail, character reference sheet]
+[lighting: 3D国漫渲染风格, 柔和体积光, 细腻材质]
+
+第1.5段——时代锚定（此行必须输出，值从 PROJECT STYLE ANCHORS 获取）：
+[era: 明代中国]
+[style: 3D国漫渲染]
+
+第二段——变更字段（每行格式固定，值用中文）：
+age: [该阶段年龄，仅数字/年龄段]
+clothing: [从头到脚的完整穿着——上装 + 腰束 + 下装 + 脚穿鞋履/靴子]
+hair: [该阶段发型，不含临时状态]
+facial: [仅新增面部变化：伤疤/光头/皱纹/老年斑/眼袋——不准重写基准面型/肤色/五官]
+accessories: [仅新增的小型随身物品]
+expression: [仅该阶段的神情气质]
+posture: [仅该阶段的站姿体态——挺拔/微躬/放松，不含动作]
+
+All other features match the reference.`;
+
+const R2I_OUTPUT_EN = `Output exactly according to this template. Skip unchanged lines.
+
+Section 1 - composition constraints (always include):
+[character design sheet] [front view] [full body] [standing pose]
+[pose: neutral standing, arms at sides, feet shoulder-width apart, neutral expression]
+[environment: pure white background, no shadow]
+[quality: sharp focus, high detail, character reference sheet]
+[lighting: 3D国漫渲染风格, 柔和体积光, 细腻材质]
+
+Section 1.5 - era anchors (always include, values from PROJECT STYLE ANCHORS):
+[era: Ming Dynasty China]
+[style: 3D Chinese Animation CG]
+
+Section 2 - changed fields (values in English):
+age: [phase age only, number or range]
+clothing: [complete outfit including footwear - top + belt + bottom + shoes/boots]
+hair: [phase hairstyle, no temporary states]
+facial: [ONLY new face features: scars/baldness/wrinkles/age spots - NO baseline re-description]
+accessories: [only new/changed small items]
+expression: [phase expression and demeanor only]
+posture: [standing posture only - straight/hunched/relaxed. NO actions]
+
+All other features match the reference.`;
+
+const R2I_DELTA_ONLY_ZH = `【增量约束】每个字段只写本阶段相较基准的变化。没变的字段整行跳过。
+【服饰完整约束】clothing 字段必须覆盖全身——上装 + 腰束 + 下装 + 鞋履/靴子。不准只写半身。
+【场景约束】禁止包含任何场景描述、环境元素、动作行为、或暗示大型道具（马匹、车辆、建筑等）。
+【面部约束】不准重写基准中已有的面型、肤色、眼型、鼻型、唇形——这些已由参考图锁定。
+【临时状态禁令】禁止包含临时/瞬时状态（汗水、泪痕、血迹、风吹等）。`;
+
+const R2I_DELTA_ONLY_EN = `[Delta constraint] Each field only describes what changed from baseline. If unchanged, skip the entire line.
+[Clothing completeness] clothing field must cover FULL BODY - top + belt + bottom + shoes/boots. Do not describe only half.
+[Scene constraint] No scenes, no environment, no actions, no large items that imply a scene (horses, vehicles, buildings).
+[Face constraint] Do NOT re-describe baseline face shape, skin, eyes, nose, lips - these are locked by the reference image.
+[No temporary states] No sweat, tears, blood, wind-blown hair.`;
 
 const R2I_PRESERVE_ZH = `保持相同的面部骨骼结构、眼型、鼻型、唇形和身体比例；保持相同的肤色和体格；保持相同的画风和光照质量；保持纯白背景和专业摄影棚布光。其他一切保持不变。`;
 const R2I_PRESERVE_EN = `Keep the same facial bone structure, eye shape, nose shape, lip shape, and body proportions; preserve the same skin tone and overall physique; keep the same art style and lighting quality; maintain a white background with professional studio lighting. Keep everything else unchanged.`;
@@ -1734,16 +1899,17 @@ const r2iPromptDef: PromptDefinition = {
   descriptionKey: "promptTemplates.prompts.r2iPromptDesc",
   category: "character",
   slots: [
-    slot("role_definition", R2I_ROLE_ZH, true, R2I_ROLE_EN),
+    slot("task", R2I_TASK_ZH, true, R2I_TASK_EN),
+    slot("output_format", R2I_OUTPUT_ZH, false, R2I_OUTPUT_EN),
     slot("preserve_rules", R2I_PRESERVE_ZH, true, R2I_PRESERVE_EN),
+    slot("delta_only", R2I_DELTA_ONLY_ZH, false, R2I_DELTA_ONLY_EN),
   ],
   buildFullPrompt(sc) {
     const s = this.slots;
     const r = (k: string) => resolve(sc, s, k);
-    return [r("role_definition"), "", r("preserve_rules")].join("\n");
+    return [r("task"), "", r("output_format"), "", r("preserve_rules"), "", r("delta_only")].join("\n");
   },
 };
-
 // ─── 7. shot_split ──────────────────────────────────────
 
 const SHOT_SPLIT_ROLE_DEFINITION = `你是一位经验丰富的分镜导演和摄影指导，擅长动画短片制作。你规划的镜头列表视觉动态丰富、叙事高效，并为AI视频生成流水线优化（首帧 → 尾帧 → 插值视频）。
@@ -4431,64 +4597,74 @@ const REF_VIDEO_H3_RULES = [
   "<Subject 1> is 李慕白，男性约180cm，精瘦身形，蓝灰长衫束腰，手持青剑 in <Picture 3>.",
   "<Subject 2> is 玉娇龙，女性约165cm，纤细身形，墨绿劲装，手持短剑 in <Picture 4>.",
   "<Subject 3> is 场景环境: 竹林中，青翠竹干密布，地面落叶层叠 in <Picture 1>.",
+  "<Picture 1> (from [Shot 1]) aligns with the 0.00-second mark of the target video;",
+  "<Picture 2> (from [Shot 1]) aligns with the 0.00-second mark of the target video;",
+  "<Picture 3> (from [Shot 1]) aligns with the 0.00-second mark of the target video;",
+  "<Picture 4> (from [Shot 1]) aligns with the 0.00-second mark of the target video.",
   "",
   "summary:",
   "[reference_generation + keyframe_completion] 李慕白在竹林中追逐玉娇龙，两人从地面跃上竹梢短暂交手。本镜头通过场景帧锁定竹林环境和角色外观。",
   "",
   "retention_analysis:",
-  "<Subject 1>: fully_preserved - 角色外观由 <Picture 3> 严格锁定",
-  "<Subject 2>: fully_preserved - 角色外观由 <Picture 4> 严格锁定",
+  "<Subject 1> (appears in [Shot 1]): fully_preserved - 角色外观由 <Picture 3> 严格锁定",
+  "<Subject 2> (appears in [Shot 1]): fully_preserved - 角色外观由 <Picture 4> 严格锁定",
   "<Subject 3>: weak_reference - 场景氛围作为视觉引导",
-  "<Picture 1>: fully_preserved - 首帧场景构图保留",
-  "<Picture 2>: fully_preserved - 尾帧场景构图保留",
+  "<Picture 1> ([Shot 1] 首帧): fully_preserved - 首帧场景构图保留",
+  "<Picture 2> ([Shot 1] 尾帧): fully_preserved - 尾帧场景构图保留",
   "",
   "detailed_description:",
-  "0.0s-2.5s: 低角度仰拍，<Picture 1>的竹林地面。<Subject 1> 屈膝蓄力半秒，随即蹬地腾空，镜头同步上摇穿过竹干。运镜: 仰拍上摇(中幅)",
-  "2.5s-5.0s: 画面切至 <Picture 2>竹梢高空。<Subject 2>自左侧斜劈青剑而来，<Subject 1>侧身以指尖格挡。运镜: 俯拍横移(小幅)",
-  "5.0s-7.5s: <Subject 1>与 <Subject 2>在竹梢高空短暂对峙，青翠竹叶被剑气吹得纷纷飘落。<Subject 1> 说：<d>[中文] 江湖路远，何必执着。</d> 运镜: 弧形环绕(中幅)",
-  "7.5s-10.0s: <Subject 2>冷哼一声，剑尖微颤，脚下竹叶轻摇。镜头缓拉远，两人对峙身影渐小。运镜: 拉远(小幅)",
+  "竹林深处，青翠竹干密布如幕，晨雾氤氲在竹叶间。",
+  "[Shot 1] 低角度仰拍，<Picture 1>的竹林地面。<Subject 1> 屈膝蓄力半秒，随即蹬地腾空，镜头同步上摇穿过竹干。Camera: 仰拍上摇(中幅)。",
+  "<Subject 1> 说：<d>[中文] 江湖路远，何必执着。</d>",
+  "画面切至 <Picture 2>竹梢高空。<Subject 2>自左侧斜劈青剑而来，<Subject 1>侧身以指尖格挡。",
+  "<Subject 1>与 <Subject 2>在竹梢高空短暂对峙，青翠竹叶被剑气吹得纷纷飘落。",
+  "<Subject 2>冷哼一声，剑尖微颤，脚下竹叶轻摇。镜头缓拉远，两人对峙身影渐小。",
   "",
   "overall_soundscape:",
-  "竹林深处的风声穿过竹干的呼啸声，竹叶被剑气吹落的簌簌声，剑刃清脆的碰撞声在竹林中回荡，远处隐约的鸟鸣。",
+  "[0.0s-5.0s] 竹林深处的风声穿过竹干的呼啸声，远处隐约的鸟鸣。",
+  "[5.0s-7.5s] 竹叶被剑气吹落的簌簌声，剑刃清脆的碰撞声在竹林中回荡。",
+  "[7.5s-10.0s] 风声渐弱，留下一片寂静。",
   "",
   "non_diegetic_music:",
-  "箫声与古筝交织起，节奏由急促转为悠远，5s处打击乐轻点一记，7.5s后音乐渐收，留下余音。",
+  "箫声与古筝交织，极轻(pp)开始，5.0s处打击乐轻点一记渐强至中弱(mp)，7.5s后渐弱至无声(niente)。",
   "",
   "=== 6-section 输出格式(严格顺序，不可变) ===",
   "",
   "subject_definitions:",
   "每个登场角色定义一个 <Subject N>。基于参考图描述实际外观。格式: <Subject N> is 角色名, 描述... in <Picture N>.",
+  "然后紧接着输出图片对齐声明：每个 <Picture N> 声明对齐时间点。格式: <Picture 1> (from [Shot 1]) aligns with the 0.00-second mark of the target video;",
   "",
   "summary:",
   "1段摘要，必须用与脚本相同的语言。如脚本为中文则摘要用中文，脚本为英文则用英文。",
   "首行 [reference_generation] 仅作为标记，正文紧接其后用脚本语言书写。",
   "",
   "retention_analysis:",
-  "对每个 Subject 和 Picture 标注视觉保留级别:",
+  "对每个 Subject 和 Picture 标注视觉保留级别，每条必须包含 (appears in [Shot N])：",
   "- fully_preserved: 外观由参考图严格锁定",
   "- partially_preserved: 参考图提供主视觉，细节可变化",
   "- attribute_transfer: 提取关键视觉特征，迁移到新场景",
   "- weak_reference: 仅作为氛围和风格指引",
   "",
   "detailed_description:",
-  "按2-3秒节拍展开的视频散文。每段含精确时间戳/<Subject N>/<Picture N>/具体物理动作/对话(如有)/运镜标注。",
-  "动作链必须连续：前一段落结束时身体的姿态，是下一段落的起点。",
+  "风格开头1-2句建立场景，然后起 [Shot 1]。全程同一运镜只写一次 Camera:。",
+  "对白嵌入: <Subject N> (S1) says: <d>[Chinese] 中文对白</d>",
   "",
   "overall_soundscape:",
-  "整体环境音描述。环境音/氛围声/音效。禁止 N/A。基于世界观和历史时期推断。",
+  "环境音描述，含时间段标签: [0.0s-3.0s] 声音... [3.0s-6.0s] 声音...",
   "",
   "non_diegetic_music:",
-  "非叙事音乐描述。配乐情绪/主要乐器/节奏特征。禁止 N/A。",
+  "乐器+速度+动态+fade。如: 大提琴缓慢弦乐，极轻(pp)开始，渐强，渐弱至无声。",
   "",
   "=== 质量检查清单(输出前逐项自检) ===",
   "[ ] 6个section全部包含，无遗漏",
   "[ ] 每个角色有 <Subject N> 定义，标注了来源图片",
-  "[ ] retention_analysis 覆盖所有 Subject 和 Picture",
-  "[ ] detailed_description 有精确到0.1s的时间切分，每2-3s一个节拍",
-  "[ ] detailed_description 每段标注了运镜动作+幅度",
+  "[ ] subject_definitions 后紧跟图片对齐声明 (<Picture N> aligns with...)",
+  "[ ] retention_analysis 每条包含 (appears in [Shot N])",
+  "[ ] detailed_description 以风格开头1-2句起，然后 [Shot 1]",
+  "[ ] 全程同一运镜只写一次 Camera:，不逐段重复",
   "[ ] 对白使用 <d> 格式，语言标注正确",
-  "[ ] overall_soundscape 和 non_diegetic_music 不是 N/A",
-  "[ ] 运镜术语来自H3术语表，动作链连续无断点",
+  "[ ] overall_soundscape 含时间段标签，non_diegetic_music 含动态/fade",
+  "[ ] 运镜术语来自H3术语表",
   "",
   "=== 严禁 ===",
   "- 真实人名(导演/演员)/品牌/IP/版权角色",
