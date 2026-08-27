@@ -207,20 +207,70 @@ function buildRefConstraintLayer(input: H3PromptInput, lang: H3Language): string
 function buildOutputFormat(input: H3PromptInput, lang: H3Language): string {
   const L = (zh: string, en: string) => lang === "zh" ? zh : en;
   return L(
-    `=== 输出格式要求 ===
-严格按上方的 6-section 格式输出。
-• summary 首行 [reference_generation]，正文用脚本语言
-• detailed_description 用 "0.0s-3.0s:" 时间戳格式
-• 对白嵌入: <Subject N> (S1) says: <d>[中文] text</d>
-• 旁白/独白（如有）嵌入对应时间段
-禁止：重复/省略 section、markdown、前言总结`,
-    `=== OUTPUT FORMAT ===
-Follow the 6-section format from CONSTRAINTS above.
-• summary starts with [reference_generation] tag
-• detailed_description uses "0.0s-3.0s:" timestamps
-• Dialogue: <Subject N> (S1) says: <d>[Chinese] text</d>
-• Narration/monologue embedded in time segments
-FORBIDDEN: duplicate/omit sections, markdown, preambles`
+    `=== 输出格式要求（必须严格按照官方 Ref2VA 6 段格式）===
+
+【1】subject_definitions:
+中文。为每个被引用的 Subject、Picture 各一行，标注 in <Picture N>。
+
+【2】summary:
+中文。首行 [reference_generation]，一句话。
+
+【3】retention_analysis:
+中文。每条必须包含 "appears in [Shot N]" + 保留级别 + 理由。
+格式: <Subject N> (appears in [Shot 1]): fully_preserved — 理由。
+     <Picture 1> ([Shot 1] 首帧): fully_preserved — 理由。
+     <Audio 1>: reference — 理由。
+
+【4】detailed_description:
+（字段名就是这个，不是 integrated_multimodal_description，只有 base mode 才用那个）
+中文。风格开头（1-2句中文建立场景和视觉风格），然后起 [Shot 1]。格式:
+  [场景风格描述。] [Shot 1] [中文视觉描述]. Camera: [H3 camera motion].
+  对白嵌入: <Subject N> (S1) says: <d>[Chinese] 中文对白</d>
+  旁白嵌入: (S1) says in an off-screen voiceover: <d>[Chinese] 中文旁白</d>
+  切镜: [Shot 2] At MM:SS.mmm, [视觉描述].
+
+运镜规则: 全程同一运镜只写一次 Camera: 在 [Shot 1] 行尾，后面每段不重复。
+
+时间分段: 12s内按3-4s分，每段只写视觉进展不写运镜。按叙事节奏分段，不机械等分。
+
+【5】overall_soundscape:
+中文。整体环境声总结，不含 shot 级音效（那些在 detailed_description 里）。
+含时间段标签: [0.0s-3.0s] 寒风... [3.0s-6.0s] 踏雪声...
+
+【6】non_diegetic_music:
+中文。乐器+速度+动态。例如: 大提琴缓慢弦乐，极轻(pp)开始，6.0s渐强至中弱(mp)，12.0s渐弱至无声。
+
+禁止: 省略section, markdown, 重复运镜, 中文body内的冗长英文叙述`,
+    `=== OUTPUT FORMAT (FOLLOW OFFICIAL Ref2VA 6-SECTION ORDER) ===
+
+【1】subject_definitions:
+Chinese. One line per Subject/Picture, ending with "in <Picture N>".
+
+【2】summary:
+Chinese. Start with [reference_generation]. One sentence.
+
+【3】retention_analysis:
+Chinese. Every entry: (appears in [Shot N]) + retention level + reason.
+Format: <Subject N> (appears in [Shot 1]): fully_preserved — reason.
+        <Picture 1> ([Shot 1] first frame): fully_preserved — reason.
+
+【4】detailed_description:
+(This IS the official Ref2VA field name. NOT integrated_multimodal_description.)
+Chinese. Style opening (1-2 Chinese sentences), then [Shot 1].
+Format: [Style context.] [Shot 1] [Chinese visual]. Camera: [H3 motion].
+  Cut: [Shot 2] At MM:SS.mmm, [visual].
+  Dialogue: <Subject N> (S1) says: <d>[Chinese] text</d>
+  Voiceover: (S1) says off-screen: <d>[Chinese] text</d>
+If same camera throughout, write Camera: ONCE only in [Shot 1]. Do NOT repeat per segment.
+
+【5】overall_soundscape:
+Chinese. Ambience summary. Time-anchored. No shot-specific SFX (they go in detailed_description).
+
+【6】non_diegetic_music:
+Chinese. Instrument + tempo + dynamics + fade.
+
+FORBIDDEN: skip sections, markdown, repeated camera, English content in Chinese body
+  `
   );
 }
 
