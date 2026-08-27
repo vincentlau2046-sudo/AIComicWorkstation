@@ -182,7 +182,7 @@
     "class_type": "CreateVideo",
     "inputs": {
       "images": [
-        "22",
+        "14",
         0
       ],
       "audio": [
@@ -220,22 +220,6 @@
       "upscale_method": "lanczos",
       "megapixels": 1.0,
       "resolution_steps": 32
-    }
-  },
-  "22": {
-    "inputs": {
-      "upscale_method": "lanczos",
-      "width": 1280,
-      "height": 720,
-      "crop": "disabled",
-      "image": [
-        "14",
-        0
-      ]
-    },
-    "class_type": "ImageScale",
-    "_meta": {
-      "title": "Upscale 1280x720"
     }
   },
   "23": {
