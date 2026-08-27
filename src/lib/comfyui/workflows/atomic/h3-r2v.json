@@ -90,7 +90,7 @@
     "class_type": "MiniMaxH3SigmaShift",
     "inputs": {
       "model": [
-        "20",
+        "22",
         0
       ],
       "shift_video": 12.0,
@@ -111,7 +111,7 @@
         0
       ],
       "scheduler": "simple",
-      "steps": 20,
+      "steps": 8,
       "denoise": 1.0
     }
   },
@@ -189,7 +189,7 @@
     "class_type": "CreateVideo",
     "inputs": {
       "images": [
-        "21",
+        "16",
         0
       ],
       "audio": [
@@ -211,7 +211,21 @@
       "codec": "auto"
     }
   },
-  "20": {
+  "22": {
+    "inputs": {
+      "model": [
+        "23",
+        0
+      ],
+      "lora_name": "minimax_h3_turbo_v4_step600_ema_pruned_comfyui.safetensors",
+      "strength_model": 1.0
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {
+      "title": "Turbo 4-step LoRA"
+    }
+  },
+  "23": {
     "inputs": {
       "model": [
         "2",
@@ -223,22 +237,6 @@
     "class_type": "LoraLoaderModelOnly",
     "_meta": {
       "title": "Motion Adapter LoRA"
-    }
-  },
-  "21": {
-    "inputs": {
-      "images": [
-        "16",
-        0
-      ],
-      "upscale_method": "lanczos",
-      "width": 1280,
-      "height": 720,
-      "crop": "disabled"
-    },
-    "class_type": "ImageScale",
-    "_meta": {
-      "title": "Upscale 1280x720"
     }
   }
 }
