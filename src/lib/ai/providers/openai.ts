@@ -2,8 +2,46 @@ import OpenAI from "openai";
 import type { AIProvider, TextOptions, ImageOptions } from "../types";
 import fs from "node:fs";
 import path from "node:path";
+import sharp from "sharp";
 import { id as genId } from "@/lib/id";
 import { getUploadDir } from "@/lib/env";
+
+// ─── VL image compression: resize to max 2048px, JPEG@85% ───
+// VL models downscale input to fixed dimensions anyway (e.g. 448×448),
+// so 2560px originals waste bandwidth with zero quality gain.
+// Target: keep each image well under 1MB base64 to stay within IFF 10MB limit.
+async function compressImageForVL(filePath: string): Promise<{ buffer: Buffer; width: number; height: number } | null> {
+  const resolved = path.resolve(filePath);
+  if (!fs.existsSync(resolved)) return null;
+
+  const originalSize = fs.statSync(resolved).size;
+  // For images already small enough, pass through as-is
+  if (originalSize < 256 * 1024) {
+    const ext = path.extname(resolved).toLowerCase();
+    return {
+      buffer: fs.readFileSync(resolved),
+      width: 0, height: 0, // metadata not needed for pass-through
+    };
+  }
+
+  const image = sharp(resolved);
+  const meta = await image.metadata();
+  const maxDim = Math.max(meta.width || 0, meta.height || 0);
+
+  // If original is already small, don't resize
+  if (maxDim <= 2048 && originalSize < 512 * 1024 && meta.format !== "png") {
+    return { buffer: fs.readFileSync(resolved), width: meta.width || 0, height: meta.height || 0 };
+  }
+
+  // Resize to max 2048px longest side, convert to JPEG@85%
+  const buffer = await image
+    .resize(2048, 2048, { fit: "inside", withoutEnlargement: true })
+    .jpeg({ quality: 85 })
+    .toBuffer();
+
+  const outMeta = await sharp(buffer).metadata();
+  return { buffer, width: outMeta.width || 0, height: outMeta.height || 0 };
+}
 
 export class OpenAIProvider implements AIProvider {
   private client: OpenAI;
@@ -31,12 +69,10 @@ export class OpenAIProvider implements AIProvider {
       const content: OpenAI.Chat.ChatCompletionContentPart[] = [];
       for (const imgPath of options.images) {
         try {
-          const resolved = path.resolve(imgPath);
-          if (fs.existsSync(resolved)) {
-            const data = fs.readFileSync(resolved).toString("base64");
-            const ext = path.extname(resolved).toLowerCase();
-            const mimeType = ext === ".png" ? "image/png" : "image/jpeg";
-            content.push({ type: "image_url", image_url: { url: `data:${mimeType};base64,${data}` } });
+          const compressed = await compressImageForVL(imgPath);
+          if (compressed) {
+            const data = compressed.buffer.toString("base64");
+            content.push({ type: "image_url", image_url: { url: `data:image/jpeg;base64,${data}` } });
           }
         } catch { /* skip unreadable */ }
       }
