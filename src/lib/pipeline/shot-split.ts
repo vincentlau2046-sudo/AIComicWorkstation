@@ -127,8 +127,8 @@ export async function handleShotSplit(task: Task) {
         innerMonologues: Array.isArray(shotData.innerMonologues) ? JSON.stringify(shotData.innerMonologues) : "[]",
         environmentPrompts: Array.isArray(shotData.environmentPrompts) ? JSON.stringify(shotData.environmentPrompts) : (Array.isArray(shotData.environment_prompts) ? JSON.stringify(shotData.environment_prompts) : "[]"),
         characters: Array.isArray(shotData.characters) ? JSON.stringify(shotData.characters) : "[]",
-        timeOfDay: (shotData.timeOfDay as string) || (shotData.time_of_day as string) || "深夜",
-        timeline: (shotData.timeline as string) || "主线",
+        timeOfDay: (shotData.timeOfDay as string) || (shotData.time_of_day as string) || null,
+        timeline: (shotData.timeline as string) || null,
         episodeId: payload.episodeId ?? null,
         sceneId: sceneId ?? null,
       })

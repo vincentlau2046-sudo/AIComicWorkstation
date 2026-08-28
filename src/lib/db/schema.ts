@@ -224,8 +224,8 @@ export const shots = sqliteTable("shots", {
   innerMonologues: text("inner_monologues").default("[]"),
   environmentPrompts: text("environment_prompts"),
   characters: text("characters"),
-  timeOfDay: text("time_of_day").default("深夜"),
-  timeline: text("timeline").default("主线"),
+  timeOfDay: text("time_of_day"),
+  timeline: text("timeline"),
   isStale: integer("is_stale").notNull().default(0),
   status: text("status", {
     enum: ["pending", "generating", "completed", "failed"],
