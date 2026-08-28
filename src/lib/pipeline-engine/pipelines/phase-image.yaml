@@ -6,18 +6,14 @@ version: "1.0"
 steps:
   - id: gen_phase_front
     type: atomic_workflow
-    workflow_id: qwen-2511-edit-plus
-    description: "以 Template 正面图为参考，应用视觉变化，生成 Phase 正面图"
+    workflow_id: qwen-2511-edit-i2i
+    description: "以 Template 正面图（source_image）为源图，用 R2I 文本做 I2I 编辑，生成 Phase 正面图"
     inputs:
-      character_ref_1: ${params.reference_image}
-      composite_prompt: ${params.phase_prompt}
-      scene_prompt: "纯白背景，无任何环境元素"
-      width: 640
-      height: 1440
+      source_image: ${params.reference_image}
+      prompt: ${params.phase_prompt}
       seed: ${params.seed}
-      edit_steps: 4
-      cfg: 1.0
-      lora_name: "Qwen-Image-Edit-2511-Lightning-8steps-V1.0-fp32.safetensors"
+      steps: 4
+      lightning_strength: 0.8
     outputs:
       phase_front: ${outputs[0].localPath}
     retry:
@@ -30,10 +26,10 @@ steps:
     depends_on: [gen_phase_front]
     inputs:
       source_image: ${steps.gen_phase_front.outputs[0]}
-      prompt: "<sks> front-left quarter view eye-level shot medium shot"
+      prompt: "<sks> left three-quarter view eye-level shot medium shot"
       seed: ${params.seed + 1}
       steps: 4
-      angle_strength: 1.0
+      angle_strength: 1.5
       lightning_strength: 0.8
     outputs:
       angle_image: ${outputs[0].localPath}

@@ -16,6 +16,7 @@ interface Enrichment {
   description: string;
   visualHint: string;
   t2iStructure?: Record<string, string> | string | null;
+  visualChanges?: Record<string, string>;
   heightCm?: number | null;
   bodyType?: string | null;
 }
@@ -135,8 +136,8 @@ export async function POST(
     const phaseBlock = chars
       .map((pc) =>
         isZh
-          ? `- ${pc.phaseName} | 现 description: ${pc.description || "（空）"} | 现 visualHint: ${pc.visualHint || "（空）"}`
-          : `- ${pc.phaseName} | current description: ${pc.description || "(empty)"} | current visualHint: ${pc.visualHint || "(empty)"}`
+          ? `- ${pc.phaseName} | 现 description: ${pc.description || "（空）"} | 现 visualHint: ${pc.visualHint || "（空）"} | 现 visualChanges: ${pc.visualChanges || "{}"}`
+          : `- ${pc.phaseName} | current description: ${pc.description || "(empty)"} | current visualHint: ${pc.visualHint || "(empty)"} | current visualChanges: ${pc.visualChanges || "{}"}`
       )
       .join("\n");
 
@@ -215,6 +216,7 @@ ${epContext}`;
             description: en.description,
             visualHint: en.visualHint,
             t2iStructure: t2iStr,
+            visualChanges: en.visualChanges ? JSON.stringify(en.visualChanges) : null,
             heightCm: en.heightCm ?? null,
             bodyType: en.bodyType ?? null,
           })

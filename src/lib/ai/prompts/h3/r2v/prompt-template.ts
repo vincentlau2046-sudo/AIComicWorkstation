@@ -234,6 +234,8 @@ function buildOutputFormat(input: H3PromptInput, lang: H3Language): string {
 格式: <Subject N> (appears in [Shot 1]): fully_preserved — 理由。
      <Picture 1> ([Shot 1] 首帧): fully_preserved — 理由。
      <Audio 1>: reference — 理由。
+若画面中存在未绑定参考图的背景人物（群演、路人、其他囚犯/士兵等），
+retention_analysis 末尾追加: Background figures: no character references apply — faces are diverse and indistinct.
 
 【4】detailed_description:
 （字段名就是这个，不是 integrated_multimodal_description，只有 base mode 才用那个）
@@ -246,6 +248,9 @@ function buildOutputFormat(input: H3PromptInput, lang: H3Language): string {
 运镜规则: 全程同一运镜只写一次 Camera: 在 [Shot 1] 行尾，后面每段不重复。
 
 时间分段: 12s内按3-4s分，每段只写视觉进展不写运镜。按叙事节奏分段，不机械等分。
+
+若画面中有背景群演（如队列中的其他士兵/囚犯、围观路人等），detailed_description 末尾追加一行:
+  注意：画面中除已定义的 <Subject N> 外，其余人物不受角色参考图约束——他们的面孔各不相同、互不雷同。
 
 【5】overall_soundscape:
 中文。整体环境声总结，不含 shot 级音效（那些在 detailed_description 里）。
@@ -279,6 +284,8 @@ Chinese. Start with [reference_generation]. One sentence.
 Chinese. Every entry: (appears in [Shot N]) + retention level + reason.
 Format: <Subject N> (appears in [Shot 1]): fully_preserved — reason.
         <Picture 1> ([Shot 1] first frame): fully_preserved — reason.
+If the frame contains background figures not bound to any reference,
+append at end: Background figures: no character references apply — faces are diverse and indistinct.
 
 【4】detailed_description:
 (This IS the official Ref2VA field name. NOT integrated_multimodal_description.)
@@ -288,6 +295,9 @@ Format: [Style context.] [Shot 1] [Chinese visual]. Camera: [H3 motion].
   Dialogue: <Subject N> (S1) says: <d>[Chinese] text</d>
   Voiceover: (S1) says off-screen: <d>[Chinese] text</d>
 If same camera throughout, write Camera: ONCE only in [Shot 1]. Do NOT repeat per segment.
+
+If the frame contains background extras (e.g., other soldiers/prisoners in a column, bystanders),
+append to detailed_description: Note: figures other than the defined <Subject N> are NOT constrained by any character reference — their faces are diverse and distinct from one another.
 
 【5】overall_soundscape:
 Chinese. Ambience summary. Time-anchored. No shot-specific SFX (they go in detailed_description).

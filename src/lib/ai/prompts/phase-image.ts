@@ -5,9 +5,17 @@ export function buildPhaseR2IPrompt(params: {
   templateDescription: string;
   /** Registry-resolved "keep the same ..." instruction; falls back to the built-in default when undefined. */
   preserveLine?: string;
+  /** 预生成的 r2iStructure（来自 DB 或 LLM 输出）。传了就直接用，跳过 visualChanges 构建。 */
+  r2iPrompt?: string;
 }): string {
-  const { characterName, phaseName, visualChanges, templateDescription, preserveLine } = params;
+  const { characterName, phaseName, visualChanges, templateDescription, preserveLine, r2iPrompt } = params;
 
+  // ── 预生成 r2iPrompt 路径：直接返回 ──
+  if (r2iPrompt) {
+    return r2iPrompt;
+  }
+
+  // ── 本地构建路径：从 visualChanges 生成 ──
   // Detect language from templateDescription (Chinese if contains CJK characters)
   const isChinese = /[\u4e00-\u9fff]/.test(templateDescription);
 

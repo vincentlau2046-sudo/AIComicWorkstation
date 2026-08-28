@@ -19,7 +19,8 @@ export function buildKeyframePromptsRequest(
     description?: string | null;
     visualHint?: string | null;
   }>,
-  visualStyle?: string
+  visualStyle?: string,
+  eraText?: string
 ): string {
   const charDescriptions = characters
     .map(
@@ -37,5 +38,8 @@ export function buildKeyframePromptsRequest(
     )
     .join("\n\n");
 
-  return `${visualStyle ? `视觉风格: ${visualStyle}\n\n` : ""}角色:\n${charDescriptions}\n\n分镜:\n${shotDescriptions}`;
+  const styleLine = visualStyle ? `视觉风格: ${visualStyle}` : "";
+  const eraLine = eraText ? `时代美学: ${eraText}` : "";
+  const header = [styleLine, eraLine].filter(Boolean).join("\n");
+  return `${header ? header + "\n\n" : ""}角色:\n${charDescriptions}\n\n分镜:\n${shotDescriptions}`;
 }

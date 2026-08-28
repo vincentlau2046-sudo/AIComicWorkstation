@@ -110,6 +110,8 @@ export interface H3PromptInput {
   languageMode: "auto" | "en" | "zh";
   slotContents?: Record<string, string>;
   visualStyleKey?: string;
+  /** 时代美学（来自 projects.eraAesthetic / episodes.eraAesthetic），注入 H3 prompt Content Layer */
+  eraAesthetic?: string;
   /** Pre-generated narration lines in H3 voiceover format (Phase 2) */
   narrations?: string[];
   innerMonologues?: string[];

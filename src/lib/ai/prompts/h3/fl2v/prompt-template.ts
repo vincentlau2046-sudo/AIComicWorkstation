@@ -36,6 +36,9 @@ function buildContentLayer(
       const h3Style = mapStyleToH3(input.visualStyleKey);
       parts.push(L(`视觉风格: ${h3Style}`, `Visual Style: ${h3Style}`));
     }
+    if (input.eraAesthetic) {
+      parts.push(L(`时代美学: ${input.eraAesthetic}`, `Era Aesthetic: ${input.eraAesthetic}`));
+    }
     parts.push("");
   }
 

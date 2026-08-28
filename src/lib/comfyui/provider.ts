@@ -490,13 +490,13 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
     inputs.length = Math.min(Math.max(17, Math.round(totalFrames / 17) * 17), 3600)
   }
 
-  /** Resolve aspect ratio to (width, height) for H3 native resolution grid. */
+  /** Resolve aspect ratio to (width, height) for H3 native resolution grid (32-aligned). */
   private resolveResolution(ratio: string): { width: number; height: number } {
     switch (ratio) {
-      case '16:9': return { width: 960, height: 544 }
-      case '9:16': return { width: 544, height: 960 }
+      case '16:9': return { width: 1376, height: 768 }
+      case '9:16': return { width: 768, height: 1376 }
       case '1:1':  return { width: 768, height: 768 }
-      case '4:3':  return { width: 960, height: 720 }
+      case '4:3':  return { width: 1024, height: 768 }
       default: {
         const parts = ratio.split(':').map(Number)
         if (parts.length === 2 && parts[0] > 0 && parts[1] > 0) {
@@ -506,7 +506,7 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
             height: Math.round(base * parts[1] / Math.max(parts[0], parts[1])),
           }
         }
-        return { width: 960, height: 544 }
+        return { width: 1376, height: 768 }
       }
     }
   }

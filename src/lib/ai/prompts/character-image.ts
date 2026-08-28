@@ -3,11 +3,12 @@
  * 调整任一字段自动影响所有调用方（pipeline / single / batch）。
  */
 const FRONT_VIEW_TEMPLATE = {
-  subject_tag:     `[character design sheet] [front view] [full body] [standing pose]`,
+  subject_tag:     `[character design illustration] [front view] [full body] [standing pose]`,
   composition:     `[composition: vertical portrait, full body from crown to soles, head near top, feet near bottom]`,
   pose_constraint: `[pose: neutral standing, arms at sides, feet shoulder-width apart, neutral expression]`,
   environment:     `[environment: pure white background, no shadow]`,
-  quality_tag:     `[quality: sharp focus, high detail, character reference sheet]`,
+  quality_tag:     `[quality: sharp focus, high detail, clean character portrait]`,
+  anti_text_tag:   `[no text] [no labels] [no annotations] [no lettering] [no watermarks]`,
 } as const;
 
 
@@ -48,6 +49,9 @@ export function buildCharacterFrontViewPrompt(
         "",
         tpl.environment,
         "",
+        s.era ? `[era: ${s.era}]` : "",
+        s.style ? `[style: ${s.style}]` : "",
+        "",
         s.age ? `${L.age} ${s.age}` : "",
         s.subject ? `${L.subject} ${s.subject}` : "",
         s.body ? `${L.body} ${s.body}` : "",
@@ -61,6 +65,7 @@ export function buildCharacterFrontViewPrompt(
         colorTag ? `${L.colorOpen} ${colorTag[1]}]` : "",
         "",
         tpl.quality_tag,
+        tpl.anti_text_tag,
       ].filter(Boolean).join("\n");
     } catch {
       // JSON parse failed — fall through to prose path
@@ -80,6 +85,7 @@ export function buildCharacterFrontViewPrompt(
     description,
     "",
     tpl.quality_tag,
+    tpl.anti_text_tag,
   ].join("\n");
 }
 

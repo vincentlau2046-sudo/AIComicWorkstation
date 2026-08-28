@@ -108,19 +108,31 @@ export const CHARACTER_ARC_OUTPUT = `═══════ 输出格式 ══�
           "episodeRange": "1,2,4",
           "triggerEvent": "家境贫寒, 在村私塾苦读",
           "visualChanges": {
-            "clothing": "粗布短褐, 草鞋沾泥",
-            "hairStyle": "束发于顶, 木簪固定",
-            "faceAge": "16-18岁, 面容清秀略带稚气",
-            "posture": "清瘦挺拔但微微含胸",
+            "age": "16-18岁",
+            "facial": "面容清秀略带稚气，皮肤白皙紧致",
+            "clothing": "粗布短褐, 草鞋沾泥（从头到脚完整穿着）",
+            "hair": "束发于顶, 木簪固定",
             "accessories": "肩挎旧书箱",
-            "expression": "眼神清澈好奇, 略带不安"
+            "expression": "眼神清澈好奇, 略带不安",
+            "posture": "清瘦挺拔但微微含胸",
+            "lighting": "与基准一致"
           },
           "statusChange": "寒门学子, 尚未有功名"
         }
       ]
     }
   ]
-}`;
+}
+─── visualChanges 字段规范（必须遵守） ───
+每个字段的值仅描述该阶段与基准的差异（增量）。
+- age: 仅年龄段数字，如"16-18岁"。不含场景描述。
+- facial: 仅面部与年龄相关的物理变化（皱纹、皮肤、眼袋等）。不准描述面型/五官。
+- clothing: 完整穿着描述，必须覆盖上装+下装+鞋履。格式："上装, 下装, 脚穿鞋履"。
+- hair: 仅发型描述，不含临时状态（汗水、风吹等）。
+- accessories: 仅手持/随身物品，不准含马匹/车辆/建筑等场景元素。
+- expression: 仅神情气质，不含重复基准描述。
+- posture: 仅站姿体态（如挺拔、微躬、放松）。不准含动作或场景元素。
+- lighting: 光照变化描述（如"战斗暗光"）。与基准一致则输出"与基准一致"。`;
 
 export const CHARACTER_ARC_LANGUAGE = `【关键语言规则】
 所有字段值必须使用与原文相同的语言。

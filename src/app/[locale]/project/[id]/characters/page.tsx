@@ -64,6 +64,7 @@ export default function CharactersPage({
 
   const getModelConfig = useModelStore((s) => s.getModelConfig);
   const textGuard = useModelGuard("text");
+  const imageGuard = useModelGuard("image");
 
   const fetchData = useCallback(async () => {
     const [chars, eps] = await Promise.all([
@@ -226,6 +227,28 @@ export default function CharactersPage({
   }
 
   async function handleBatchGen(type: string) {
+    // 图片批量 — 入队模式（task queue 串行处理，无超时）
+    if (type === "t2i_image" || type === "r2i_image") {
+      if (!imageGuard()) return;
+      setBatchGenerating(true);
+      try {
+        const res = await apiFetch(`/api/projects/${projectId}/characters/batch-image`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            modelConfig: getModelConfig(),
+            phaseOnly: type !== "t2i_image",
+          }),
+        });
+        const data = await res.json();
+        toast.success(`已加入队列，共 ${data.enqueued} 个任务`);
+      } catch {
+        toast.error("入队失败");
+      }
+      setBatchGenerating(false);
+      return;
+    }
+
     if (!textGuard()) return;
     setBatchGenerating(true);
     try {
@@ -239,6 +262,7 @@ export default function CharactersPage({
       toast.error("批量生成失败");
     }
     setBatchGenerating(false);
+    fetchData();
   }
 
   if (loading) {

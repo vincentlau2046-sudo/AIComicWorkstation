@@ -144,6 +144,8 @@ export function CharacterCard({
     try {
       const res = await apiFetch(`/api/projects/${projectId}/characters/${id}/r2i-prompt`, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modelConfig: { text: getModelConfig().text }, language: locale }),
       });
       const data = await res.json();
       if (data.prompt) {

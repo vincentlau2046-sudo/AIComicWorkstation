@@ -335,6 +335,8 @@ export default function EpisodeStoryboardPage() {
   function startTaskPolling(projectId: string, taskIds: string[], onComplete: () => void) {
     if (taskPollRef.current) clearInterval(taskPollRef.current);
     const taskIdSet = new Set(taskIds);
+    let pollCount = 0;
+    let anyPickedUp = false; // true once any task transitions away from "pending"
     taskPollRef.current = setInterval(async () => {
       try {
         const resp = await apiFetch(`/api/projects/${projectId}/tasks`);
@@ -343,10 +345,25 @@ export default function EpisodeStoryboardPage() {
         const remaining = data.tasks.filter(
           (t) => taskIdSet.has(t.id) && (t.status === "pending" || t.status === "running")
         );
-        // Guard: if none of our task IDs appeared in the response at all,
-        // the batch hasn't been picked up yet — keep polling
-        const anyFound = data.tasks.some((t) => taskIdSet.has(t.id));
-        if (!anyFound) return;
+
+        // Detect if ANY task has been picked up by the worker
+        const hasProgress = data.tasks.some(
+          (t) => taskIdSet.has(t.id) && (t.status === "running" || t.status === "completed")
+        );
+        if (hasProgress) anyPickedUp = true;
+
+        // Timeout guard: if NO task was ever picked up after 60s → ComfyUI likely offline
+        if (!anyPickedUp) {
+          pollCount++;
+          if (pollCount > 12) { // 60s (12 × 5s)
+            if (taskPollRef.current) { clearInterval(taskPollRef.current); taskPollRef.current = null; }
+            toast.error("任务超时未启动——请检查 ComfyUI 是否在线");
+            onComplete();
+          }
+          return;
+        }
+
+        // Tasks are being processed — wait for completion
         if (remaining.length === 0) {
           if (taskPollRef.current) { clearInterval(taskPollRef.current); taskPollRef.current = null; }
           const failed = data.tasks.filter((t) => taskIdSet.has(t.id) && t.status === "failed");
@@ -368,9 +385,6 @@ export default function EpisodeStoryboardPage() {
     setGeneratingSceneFrames(true);
     setLastBatchAction("batch_scene_frame");
 
-    const targets = project.shots.filter((s) => overwrite ? true : !getSceneRefFrameUrl(s));
-    setBatchProgress({ total: targets.length, completed: 0, failed: [] });
-
     try {
       const response = await apiFetch(`/api/projects/${project.id}/generate`, {
         method: "POST",
@@ -382,27 +396,33 @@ export default function EpisodeStoryboardPage() {
           episodeId: useProjectStore.getState().currentEpisodeId,
         }),
       });
-      const data = await response.json() as { results: Array<{ shotId?: string; status: string }> };
-      const failedIds = (data.results || []).filter((r) => r.status === "error").map((r) => r.shotId!).filter(Boolean);
-      const totalProcessed = data.results?.length || targets.length;
-      setBatchProgress({ total: totalProcessed, completed: totalProcessed, failed: failedIds });
 
-      if (failedIds.length > 0) {
-        setLastFailedShots(failedIds);
-        toast.error(`${failedIds.length}/${totalProcessed} shots failed`);
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: "Unknown error" }));
+        throw new Error(err.error || `HTTP ${response.status}`);
+      }
+
+      const data = await response.json() as { enqueued: number; taskIds: string[] };
+
+      if (!data.enqueued || data.enqueued === 0) {
+        toast.info("所有镜头已有场景帧，无需生成");
+        setGeneratingSceneFrames(false);
+        setSceneFramesOverwrite(false);
       } else {
-        setLastFailedShots([]);
-        toast.success(`All ${totalProcessed} shots completed`);
+        toast.success(`已调度 ${data.enqueued} 个场景帧任务，后台处理中`);
+        startTaskPolling(project.id, data.taskIds, () => {
+          setGeneratingSceneFrames(false);
+          setSceneFramesOverwrite(false);
+          toast.success(`${data.enqueued} 个场景帧生成完成`);
+          fetchProject(project.id, useProjectStore.getState().currentEpisodeId!);
+        });
       }
     } catch (err) {
       console.error("Batch scene frame error:", err);
       toast.error(err instanceof Error ? err.message : t("common.generationFailed"));
+      setGeneratingSceneFrames(false);
+      setSceneFramesOverwrite(false);
     }
-
-    setSceneFramesOverwrite(false);
-    setGeneratingSceneFrames(false);
-    await fetchProject(project.id, useProjectStore.getState().currentEpisodeId!);
-    setBatchProgress(null);
   }
 
   async function handleGenerateRefPrompts() {
@@ -526,11 +546,21 @@ export default function EpisodeStoryboardPage() {
       });
       const data = await response.json() as { results?: Array<{ shotId?: string; status: string }>; enqueued?: number };
 
-      // Reference mode: backend returns enqueued count (async processing)
+      // Reference mode: backend returns enqueued count (async processing via task queue)
       if (data.enqueued !== undefined) {
-        setBatchProgress({ total: data.enqueued, completed: 0, failed: [] });
-        toast.success(`Enqueued ${data.enqueued} video prompt tasks — generating...`);
-        setGeneratingVideoPrompts(false);
+        if (data.enqueued === 0) {
+          toast.info("所有镜头已有视频提示词，无需生成");
+          setGeneratingVideoPrompts(false);
+          setBatchProgress(null);
+        } else {
+          toast.success(`已调度 ${data.enqueued} 个视频提示词任务，后台处理中`);
+          startTaskPolling(project.id, (data as any).taskIds || [], () => {
+            setGeneratingVideoPrompts(false);
+            setBatchProgress(null);
+            toast.success(`${data.enqueued} 个视频提示词生成完成`);
+            fetchProject(project.id, useProjectStore.getState().currentEpisodeId!);
+          });
+        }
         return;
       }
 
@@ -563,9 +593,6 @@ export default function EpisodeStoryboardPage() {
     setGeneratingVideos(true);
     setLastBatchAction("batch_reference_video");
 
-    const targets = project.shots.filter((s) => overwrite ? true : !getReferenceVideoUrl(s));
-    setBatchProgress({ total: targets.length, completed: 0, failed: [] });
-
     try {
       const response = await apiFetch(`/api/projects/${project.id}/generate`, {
         method: "POST",
@@ -577,27 +604,33 @@ export default function EpisodeStoryboardPage() {
           episodeId: useProjectStore.getState().currentEpisodeId,
         }),
       });
-      const data = await response.json() as { results: Array<{ shotId?: string; status: string }> };
-      const failedIds = (data.results || []).filter((r) => r.status === "error").map((r) => r.shotId!).filter(Boolean);
-      const totalProcessed = data.results?.length || targets.length;
-      setBatchProgress({ total: totalProcessed, completed: totalProcessed, failed: failedIds });
 
-      if (failedIds.length > 0) {
-        setLastFailedShots(failedIds);
-        toast.error(`${failedIds.length}/${totalProcessed} shots failed`);
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({ error: "Unknown error" }));
+        throw new Error(err.error || `HTTP ${response.status}`);
+      }
+
+      const data = await response.json() as { enqueued: number; taskIds: string[] };
+
+      if (!data.enqueued || data.enqueued === 0) {
+        toast.info("所有镜头已有参考视频，无需生成");
+        setGeneratingVideos(false);
+        setGeneratingVideosOverwrite(false);
       } else {
-        setLastFailedShots([]);
-        toast.success(`All ${totalProcessed} shots completed`);
+        toast.success(`已调度 ${data.enqueued} 个参考视频任务，后台处理中`);
+        startTaskPolling(project.id, data.taskIds, () => {
+          setGeneratingVideos(false);
+          setGeneratingVideosOverwrite(false);
+          toast.success(`${data.enqueued} 个参考视频生成完成`);
+          fetchProject(project.id, useProjectStore.getState().currentEpisodeId!);
+        });
       }
     } catch (err) {
       console.error("Batch reference video error:", err);
       toast.error(err instanceof Error ? err.message : t("common.generationFailed"));
+      setGeneratingVideos(false);
+      setGeneratingVideosOverwrite(false);
     }
-
-    setGeneratingVideosOverwrite(false);
-    setGeneratingVideos(false);
-    await fetchProject(project.id, useProjectStore.getState().currentEpisodeId!);
-    setBatchProgress(null);
   }
 
   async function handleRetryFailed() {

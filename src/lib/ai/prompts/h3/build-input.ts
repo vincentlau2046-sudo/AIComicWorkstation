@@ -163,10 +163,12 @@ export async function buildH3Input(opts: BuildH3InputOptions): Promise<H3PromptI
   const [project] = await db.select().from(projects).where(eq(projects.id, projectId));
   let episodeTitle: string | undefined;
   let episodeKeywords: string | undefined;
+  let episodeEraAesthetic: string | undefined;
   if (episodeId) {
     const [ep] = await db.select().from(episodes).where(eq(episodes.id, episodeId));
     episodeTitle = ep?.title || undefined;
     episodeKeywords = ep?.keywords || undefined;
+    episodeEraAesthetic = ep?.eraAesthetic || undefined;
   }
 
   // ── Generation mode ──
@@ -209,6 +211,7 @@ export async function buildH3Input(opts: BuildH3InputOptions): Promise<H3PromptI
     episodeKeywords,
     projectIdea: project?.idea || undefined,
     visualStyleKey: project?.visualStyleKey || undefined,
+    eraAesthetic: project?.eraAesthetic || episodeEraAesthetic || undefined,
     activeModules: process.env.H3_FL2V_NARRATION !== "off" ? ["narration"] : [],
     spatialHints: spatialHints.length > 0 ? spatialHints : undefined,
     languageMode: (process.env.H3_LANGUAGE as "auto" | "en" | "zh" | undefined) || "auto",

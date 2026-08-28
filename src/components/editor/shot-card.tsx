@@ -780,8 +780,8 @@ export function ShotCard({
       });
       if (!resp.ok) throw new Error("Failed");
       const data = await resp.json();
-      if (data.taskId) {
-        pollUntilDone([data.taskId], () => { setGeneratingSceneFrame(false); onUpdate(); });
+      if (data.taskIds?.length) {
+        pollUntilDone(data.taskIds, () => { setGeneratingSceneFrame(false); onUpdate(); });
       } else {
         onUpdate();
         setGeneratingSceneFrame(false);
@@ -1464,8 +1464,8 @@ export function ShotCard({
               {generatingKeyframePrompt
                 ? t("common.generating")
                 : hasRefImages
-                  ? t("shot.regenerateRefImages") || "重新生成场景帧提示词"
-                  : t("shot.generateRefImages") || "生成场景帧提示词"
+                  ? t("shot.regenerateRefPrompt") || "重新生成提示词"
+                  : t("shot.generateRefPrompt") || "生成提示词"
               }
             </Button>
           ) : (
