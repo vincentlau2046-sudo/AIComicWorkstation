@@ -54,7 +54,7 @@ export function buildShotSplitSystem(maxDuration: number): string {
         "timeline": "主线|平行|闪回",
         "narrations": [{"text": "旁白内容", "startTime": 0.5, "endTime": 2.0}],
         "innerMonologues": [{"character": "角色名", "text": "内心独白", "startTime": 1.0, "endTime": 3.0}],
-        "referenceImagePrompts": ["参考图 1 的生成描述", "参考图 2 的描述"]
+        "environmentPrompts": ["纯场景环境描述数组。无转场时为单元素；涉及物理地点跨越/光线质变/多节点空间时按时间顺序排列，第0个为起始环境。每个元素不含角色/动作/对白"]
       }
     ]
   }
@@ -65,17 +65,14 @@ export function buildShotSplitSystem(maxDuration: number): string {
 - 包括画面中可见的角色，即使他们没有台词
 - 必须与角色列表中提供的角色名完全一致
 
-=== referenceImagePrompts（用于参考图生成模式）===
-- 包含 1-4 个图像生成提示的数组，描述该镜头所需的参考图
-- 每个提示都是一个完整的图像生成描述，将被发送到 AI 图像生成器
-- 像摄影师在拍摄前准备参考照片一样思考：
-  * 角色特写：面部、表情、服装细节，确保跨帧一致性
-  * 关键道具/物体：必须保持一致外观的重要物品（武器、法器、手机）
-  * 环境/场景：需要视觉锚定的复杂背景
-  * 互动：两个角色在一起，展示空间关系
-- 每个提示必须包含画风（与项目的视觉风格一致）
-- 每个提示应为 30-80 词，描述性强且具体
-- 每个镜头最少 1 张参考图，最多 4 张
+=== environmentPrompts（用于场景参考帧生成）===
+- 纯场景环境描述的字符串数组，直接供后续场景参考帧生成管线使用
+- 不含任何角色、动作、对白——只描述物理空间、灯光、色调、氛围
+- 无转场时为单元素数组；涉及以下条件时按时间顺序排列多个元素：
+  * 物理地点跨越（地面→空中、室内→室外）
+  * 光线/时间质变（黄昏→深夜，跨越至少2个时段）
+  * 多节点空间（街巷转角、桥面+桥下、多房间穿梭）
+- 第0个元素为镜头起始环境
 
 === compositionGuide ===
 - "compositionGuide"：该镜头推荐的构图技法。取值："rule_of_thirds" | "golden_ratio" | "symmetric" | "diagonal" | "frame_within_frame" | "leading_lines" | "center_dominant"。根据场景氛围和动作选择。

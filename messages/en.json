@@ -202,7 +202,9 @@
     "dof": "DoF",
     "sfx": "SFX",
     "music": "Music",
-    "shot": "Shot"
+    "shot": "Shot",
+    "generateRefPrompt": "Generate Ref Prompts",
+    "regenerateRefPrompt": "Regenerate Prompts"
   },
   "storyboard": {
     "stale": "Outdated",
@@ -537,7 +539,7 @@
       "refImageOutput": "Ref Image Output",
       "refImageOutputDesc": "JSON output format for ref image prompts",
       "extractionRules": "Extraction Rules",
-      "extractionRulesDesc": "Rules for extracting characters from text",
+      "extractionRulesDesc": "Character exhaustive extraction rules",
       "styleMatching": "Style Matching",
       "styleMatchingDesc": "Style consistency rules with character reference images",
       "faceDetail": "Face Detail",
@@ -611,13 +613,13 @@
       "contentInject": "Content Inject",
       "contentInjectDesc": "Content Inject slot for H3 prompt template",
       "detectionRules": "Detection Rules",
-      "detectionRulesDesc": "Detection Rules slot for H3 prompt template",
+      "detectionRulesDesc": "Arc detection rules",
       "dialogue": "Dialogue",
       "dialogueDesc": "Dialogue slot for H3 prompt template",
       "dialogueLabel": "Dialogue Label",
       "dialogueLabelDesc": "Dialogue Label slot for H3 prompt template",
       "dimensions": "Dimensions",
-      "dimensionsDesc": "Dimensions slot for H3 prompt template",
+      "dimensionsDesc": "Project assessment dimensions",
       "episodeLabel": "Episode Label",
       "episodeLabelDesc": "Episode Label slot for H3 prompt template",
       "format": "Format",
@@ -635,7 +637,7 @@
       "outputZh": "Output Zh",
       "outputZhDesc": "Output Zh slot for H3 prompt template",
       "phaseRules": "Phase Rules",
-      "phaseRulesDesc": "Phase Rules slot for H3 prompt template",
+      "phaseRulesDesc": "Arc phase splitting rules",
       "presenceRules": "Presence Rules",
       "presenceRulesDesc": "Presence Rules slot for H3 prompt template",
       "principles": "Principles",
@@ -668,16 +670,8 @@
       "changeRulesDesc": "Phase R2I visual change application rules",
       "outputStandard": "Output Standard",
       "outputStandardDesc": "Phase R2I output quality standard",
-      "extractionRules": "Extraction Rules",
-      "extractionRulesDesc": "Character exhaustive extraction rules",
       "splitRules": "Split Rules",
-      "splitRulesDesc": "Episode splitting rules",
-      "detectionRules": "Detection Rules",
-      "detectionRulesDesc": "Arc detection rules",
-      "phaseRules": "Phase Rules",
-      "phaseRulesDesc": "Arc phase splitting rules",
-      "dimensions": "Dimensions",
-      "dimensionsDesc": "Project assessment dimensions"
+      "splitRulesDesc": "Episode splitting rules"
     }
   },
   "categories": {}

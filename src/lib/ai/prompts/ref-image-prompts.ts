@@ -12,6 +12,8 @@ export function buildRefImagePromptsRequest(
   shots: Array<{
     sequence: number;
     prompt: string;
+    environmentPrompts?: string[] | null;
+    characters?: string[] | null;
     motionScript?: string | null;
     cameraDirection?: string | null;
     duration?: number | null;
@@ -34,6 +36,13 @@ export function buildRefImagePromptsRequest(
       const lines = [
         `镜头 ${s.sequence}（时长 ${duration}s）：${s.prompt}`,
       ];
+      if (s.environmentPrompts && s.environmentPrompts.length > 0) {
+        lines.push(`  场景环境描述（${s.environmentPrompts.length} 帧，已预提取，直接用于场景参考帧生成）：`);
+        s.environmentPrompts.forEach((ep, i) => lines.push(`    [帧 ${i + 1}] ${ep}`));
+      }
+      if (s.characters && s.characters.length > 0) {
+        lines.push(`  登场角色：${s.characters.join("、")}`);
+      }
       if (s.motionScript) lines.push(`  剧情动作（用于判断角色所处的物理地点，不要画人）：${s.motionScript}`);
       if (s.cameraDirection) lines.push(`  镜头运动：${s.cameraDirection}`);
       return lines.join("\n");
@@ -109,6 +118,17 @@ export function buildRefImagePromptsRequest(
     `- 空间结构单一，无需要分视角覆盖的盲区`,
     ``,
     `⚠️ 注意：对话/站立/近景特写/蓄力/挥拳/开门/转身都是单帧场景——这些改变的是角色动作，不是场景空间本身。不要因为"镜头情绪起伏大"或"动作很复杂"就拆多帧。`,
+    ``,
+    `## 场景推断规则（当本帧环境信息不足时）`,
+    ``,
+    `分镜列表中部分特写/近景镜头的描述可能以角色为主体，环境词汇较少。你必须通过以下方法推断场景，不得因描述含角色就跳过该帧：`,
+    ``,
+    `1. **本帧提取**：从当前镜头描述中提取所有非角色的环境信号——地点名词、天气、时间段、光线方向/色温、地面材质、道具位置、空间大小。忽略角色名和角色专属描述。`,
+    `2. **上下帧参照**：查看当前镜头前后相邻的 1-2 个镜头。若它们在同一场景内（地点名词相同或相邻），复用它们的空间定义。`,
+    `   例：Shot #3 描述为 "雪原特写，重点在于林策的脸部"，环境描述不足 → Shot #2 和 Shot #4 都是 "山海关外雪原" → 场景就是这片雪原。`,
+    `3. **空间缩放**：若上下帧为全景/中景描述了大空间，本帧为特写——缩小空间范围，保留相同的地点/天气/光线/色调，增加 "背景虚化""地面特写""微小空间" 等近景提示。`,
+    `4. **道具锚定**：若本帧提到了具体道具（如水囊、武器、火堆、铁链），以该道具为锚点推断周围空间——道具所在的物理位置就是场景。`,
+    `5. **推断优先级**：本帧环境词 → 上下帧同场景描述 → 上一帧的空间定义（保留地点/天气/色调，缩放空间）。`,
     ``,
     `## 分镜列表`,
     shotDescriptions,

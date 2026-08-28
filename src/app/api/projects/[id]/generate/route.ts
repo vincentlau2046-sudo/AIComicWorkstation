@@ -2374,6 +2374,16 @@ async function handleBatchFrameGenerate(
     return NextResponse.json({ error: "No image model configured" }, { status: 400 });
   }
 
+  // Preflight: check ComfyUI health before enqueuing
+  const { checkComfyHealth } = await import("@/lib/comfyui/health");
+  const comfyStatus = await checkComfyHealth();
+  if (!comfyStatus.ok) {
+    return NextResponse.json(
+      { error: `ComfyUI is offline (${comfyStatus.error || "unreachable"}). Please start ComfyUI and try again.` },
+      { status: 503 }
+    );
+  }
+
   let batchVersionId = payload?.versionId as string | undefined;
   if (!batchVersionId) {
     const [latestVer] = await db.select({ id: storyboardVersions.id })
@@ -2693,6 +2703,16 @@ async function handleBatchVideoGenerate(
     return NextResponse.json({ error: "No video model configured" }, { status: 400 });
   }
 
+  // Preflight: check ComfyUI health before enqueuing
+  const { checkComfyHealth } = await import("@/lib/comfyui/health");
+  const comfyStatus = await checkComfyHealth();
+  if (!comfyStatus.ok) {
+    return NextResponse.json(
+      { error: `ComfyUI is offline (${comfyStatus.error || "unreachable"}). Please start ComfyUI and try again.` },
+      { status: 503 }
+    );
+  }
+
   let batchVersionId = payload?.versionId as string | undefined;
   if (!batchVersionId) {
     const [latestVer] = await db.select({ id: storyboardVersions.id })
@@ -2775,6 +2795,19 @@ async function handleBatchSceneFrameViaQueue(
   episodeId: string | undefined,
   taskType: string,
 ) {
+  // Preflight: check ComfyUI health before enqueuing (only for ComfyUI-dependent task types)
+  const COMFYUI_TASK_TYPES = ["scene_frame_generate", "reference_video_generate", "frame_generate", "video_generate", "character_image"];
+  if (COMFYUI_TASK_TYPES.includes(taskType)) {
+    const { checkComfyHealth } = await import("@/lib/comfyui/health");
+    const comfyStatus = await checkComfyHealth();
+    if (!comfyStatus.ok) {
+      return NextResponse.json(
+        { error: `ComfyUI is offline (${comfyStatus.error || "unreachable"}). Please start ComfyUI and try again.` },
+        { status: 503 }
+      );
+    }
+  }
+
   const batchVersionId = payload?.versionId as string | undefined;
   const { eq, and, asc } = await import("drizzle-orm");
   const shotWhereConditions = [eq(shots.projectId, projectId)];
@@ -4184,6 +4217,7 @@ async function handleGenerateRefPrompts(
 
   let updatedCount = 0;
   const failed: Array<{ seq: number; err: string }> = [];
+  const singleShotId = payload?.shotId as string | undefined;
   let previousBatchTail: { sequence: number; sceneName?: string; prompt: string } | null = null;
 
   for (let bi = 0; bi < batches.length; bi++) {
@@ -4194,6 +4228,12 @@ async function handleGenerateRefPrompts(
         batch.map((s) => ({
           sequence: s.sequence,
           prompt: s.prompt || "",
+          environmentPrompts: s.environmentPrompts
+            ? (() => { try { return JSON.parse(s.environmentPrompts); } catch { return undefined; } })()
+            : undefined,
+          characters: s.characters
+            ? (() => { try { return JSON.parse(s.characters); } catch { return undefined; } })()
+            : undefined,
           motionScript: s.motionScript,
           cameraDirection: s.cameraDirection,
           duration: s.duration,
@@ -4211,6 +4251,25 @@ async function handleGenerateRefPrompts(
       if (previousBatchTail) {
         promptRequest += `\n\n## 剧情连续性上下文\n本批次的镜头 ${batch[0].sequence} 紧接上一批次镜头 ${previousBatchTail.sequence} 之后。上一个镜头的结束场景是"${previousBatchTail.sceneName || "未命名"}"：${previousBatchTail.prompt.slice(0, 160)}...\n请让本批次第一个镜头的场景在空间/光线/色调上与之自然衔接，避免突兀重置到"起始场景"风格。`;
       }
+
+      // Single-shot mode: only generate for the target shot.
+      let targetSequence: number | undefined;
+      if (singleShotId) {
+        const targetShot = batch.find((s) => s.id === singleShotId);
+        if (!targetShot) continue; // target not in this batch, skip
+        targetSequence = targetShot.sequence;
+        promptRequest += `\n\n## 重点镜头 — 本次只需要为以下镜头生成参考帧提示词
+
+镜头 ${targetShot.sequence}（时长 ${targetShot.duration}s）：
+${targetShot.prompt || ""}
+${targetShot.motionScript ? `动作：${targetShot.motionScript}` : ""}
+${targetShot.cameraDirection ? `运镜：${targetShot.cameraDirection}` : ""}
+
+请在输出 JSON 数组中**只输出以上镜头的一条记录**（shotSequence=${targetShot.sequence}），不要输出其他镜头。`;
+          console.log(`[GenerateRefPrompts] single-shot target=#${targetShot.sequence}, prompt=${promptRequest.length}c`);
+      }
+
+      console.log(`[GenerateRefPrompts] Calling LLM — systemPrompt=${refImageSystem.length}c, userPrompt=${promptRequest.length}c`);
 
       const result = await textProvider.generateText(promptRequest, {
         systemPrompt: refImageSystem,
@@ -4230,6 +4289,51 @@ async function handleGenerateRefPrompts(
 
       let batchUpdated = 0;
       let lastEntryForContinuity: { sequence: number; sceneName?: string; prompt: string } | null = null;
+
+      // Single-shot mode: only process the target entry.
+      if (singleShotId) {
+        const entry = parsed.find((e) => e.shotSequence === targetSequence);
+        if (!entry) {
+          console.warn(`[GenerateRefPrompts] single-shot batch ${bi + 1}: shot ${targetSequence} missing from LLM output`);
+          failed.push({ seq: targetSequence!, err: "missing from batch output" });
+          continue;
+        }
+        let sceneList: Array<{ name: string; prompt: string }> = [];
+        if (Array.isArray(entry.scenes) && entry.scenes.length > 0) {
+          sceneList = entry.scenes.filter((s) => s && typeof s.prompt === "string" && s.prompt.trim());
+        } else if (Array.isArray(entry.prompts) && entry.prompts.length > 0) {
+          sceneList = entry.prompts.map((p, i) => ({ name: `场景 ${i + 1}`, prompt: p }));
+        }
+        if (sceneList.length === 0) {
+          console.warn(`[GenerateRefPrompts] single-shot ${targetSequence}: empty scenes/prompts`);
+          failed.push({ seq: targetSequence!, err: "empty scenes/prompts" });
+          continue;
+        }
+        console.log(`[GenerateRefPrompts] single-shot ${targetSequence}: ${sceneList.length} scene(s) parsed${sceneList.length > 1 ? ' ⚡ MULTI' : ''}`);
+        const shotCharacters = Array.isArray(entry.characters) ? entry.characters : [];
+        const targetShot = batch.find((s) => s.id === singleShotId)!;
+        await deleteAssetsByType(targetShot.id, "reference");
+        for (let pi = 0; pi < sceneList.length; pi++) {
+          const scene = sceneList[pi];
+          await insertAssetVersion({
+            shotId: targetShot.id,
+            type: "reference",
+            sequenceInType: pi,
+            prompt: scene.prompt,
+            status: "pending",
+            characters: shotCharacters,
+            meta: { sceneName: scene.name || `场景 ${pi + 1}` },
+          });
+        }
+        updatedCount++;
+        batchUpdated++;
+        const lastScene = sceneList[sceneList.length - 1];
+        lastEntryForContinuity = { sequence: targetShot.sequence, sceneName: lastScene.name, prompt: lastScene.prompt };
+        if (lastEntryForContinuity) previousBatchTail = lastEntryForContinuity;
+        console.log(`[GenerateRefPrompts] ✓ single-shot batch ${bi + 1}/${batches.length}: ${batchUpdated} shot in ${((Date.now() - batchStart) / 1000).toFixed(1)}s`);
+        continue; // skip the normal batch loop below
+      }
+
       for (const shot of batch) {
         try {
           const entry = parsed.find((e) => e.shotSequence === shot.sequence);

@@ -2031,7 +2031,7 @@ const SHOT_SPLIT_OUTPUT_FORMAT_TEMPLATE = `输出 JSON 数组（只输出共享�
     ],
     "time_of_day": "清晨|午时|午后|傍晚|深夜|黎明",
     "timeline": "主线|平行|闪回",
-    "referenceImagePrompts": ["参考图 1 的生成描述", "参考图 2 的描述"]
+    "environmentPrompts": ["纯场景环境描述（不含角色、动作、对白）。无转场时为单元素数组；跨地点/光线质变/多节点空间时按时间排列，第0个为起始环境"]
   }
 ]`;
 
@@ -4127,6 +4127,15 @@ const REF_IMAGE_PROMPTS_RULES = `规则：
 - 图像描述里**绝对不能**提到任何角色名，也不能描述人物动作/服饰/肢体。
 - 图像描述里**绝对不能**把能量光效、烙印、符咒、单独道具当做"场景"来描绘——它们属于动作细节，由视频生成阶段处理。
 
+## 角色描述 → 场景推断（最高优先级）
+你收到的分镜列表中，部分镜头的描述可能以角色为主体（"特写林策的脸部"、"林策与军汉对峙"）。
+你的任务不是照搬这些描述，而是从中**提取和推断**纯环境信息：
+
+1. **先提取**：从当前镜头描述中抓取所有非角色的环境词汇——地点、天气、光线方向/色温、色彩基调、道具、空间介词。
+2. **再参照**：若环境词汇不足，查看上下帧的描述——它们很可能在同一物理场景内，复用其地点/天气/光线/色调。
+3. **后推断**：若全帧以角色为主，无直接环境词 → 缩小空间到特写尺度（"极小范围的雪原空间，背景虚化"），保留上下帧的地点/天气/光线。
+4. **禁止**：因描述含角色就跳过该帧、输出空白场景、用"模糊背景"敷衍。
+
 ${physicsRealismBlock()}
 
 【Qwen Image 结构化格式】
@@ -4422,6 +4431,16 @@ R30-SPACE: 当 ≥2 个角色同时出现在画面中时，必须遵守以下规
   4. 过肩镜头必须标注前景角色背对镜头，后景角色正对镜头
 R31-POSITION: 每个时间段结束后标注角色位置变化`;
 
+const REF_CONSTRAINT_REF_SCOPE = `【参考图作用域边界 — 防面孔泄漏（2026-08-27）】
+R32-HARD: 角色参考图 (<Picture N=角色>) 仅影响其绑定的 <Subject N>——
+不得将该参考图的面孔/体型/服饰施加到画面中的任何未定义人物上。
+若画面中存在未绑定参考图的背景人物（群演、路人、旁观者、其他囚犯/士兵等），
+必须在 detailed_description 中显式声明：
+  - 这些人物不受任何角色参考图的约束
+  - 他们拥有不同的面孔、体型和姿态
+  - 他们的面孔应多样化、不清晰可见（如在远景中/风雪遮挡/背对镜头/戴帽兜）
+R33: 若某镜头只有场景帧无角色参考图，声明 "No character references apply to background figures"`;
+
 const REF_CONSTRAINT_FORMAT = `【格式】
 R24. 禁止 markdown、代码块、注释——纯 H3 格式输出
 R25. 禁止逐字复制剧本——转换为丰富的影视级散文
@@ -4498,6 +4517,17 @@ R30-SPACE: When ≥2 characters appear in the same frame, you must:
   3. Do not have all characters face the same direction
   4. Over-the-shoulder shots must mark the foreground character with their back to camera, the background character facing camera
 R31-POSITION: After each time segment, note the change in character positions.`;
+
+const REF_CONSTRAINT_REF_SCOPE_EN = `【Reference scope boundary — prevent face leakage (2026-08-27)】
+R32-HARD: Character reference images (<Picture N=character>) ONLY affect their bound <Subject N> —
+do NOT apply that reference's face/body/clothing to any undefined figures in the frame.
+If the frame contains background figures not bound to any reference (extras, passersby, other prisoners/soldiers, etc.),
+you MUST explicitly declare in detailed_description:
+  - These figures are NOT constrained by any character reference image
+  - They have diverse faces, builds, and poses
+  - Their faces should be varied and indistinct (e.g., at distance / obscured by snow / facing away / hooded)
+R33: If a shot has only scene frames with no character references, declare "No character references apply to background figures"`;
+
 const REF_CONSTRAINT_FORMAT_EN = `【Format】
 R24. No markdown, code blocks, or comments — pure H3-format output.
 R25. Do not copy the script verbatim — convert it into rich, film-grade prose.
@@ -4519,6 +4549,7 @@ const refConstraintsH3Def: PromptDefinition = {
     slot("voice", REF_CONSTRAINT_VOICE, true, REF_CONSTRAINT_VOICE_EN),
     slot("format", REF_CONSTRAINT_FORMAT, true, REF_CONSTRAINT_FORMAT_EN),
     slot("spatial", REF_CONSTRAINT_SPATIAL, true, REF_CONSTRAINT_SPATIAL_EN),
+    slot("ref_scope", REF_CONSTRAINT_REF_SCOPE, true, REF_CONSTRAINT_REF_SCOPE_EN),
   ],
   buildFullPrompt(sc) {
     const s = this.slots;
@@ -4534,6 +4565,7 @@ const refConstraintsH3Def: PromptDefinition = {
       r("action_detail"), "",
       r("body_vocab"), "",
       r("spatial"), "",
+      r("ref_scope"), "",
       r("voice"), "",
       r("format"),
     ].join("\n");
@@ -4600,10 +4632,11 @@ const REF_VIDEO_H3_RULES = [
   "<Picture 1> (from [Shot 1]) aligns with the 0.00-second mark of the target video;",
   "<Picture 2> (from [Shot 1]) aligns with the 0.00-second mark of the target video;",
   "<Picture 3> (from [Shot 1]) aligns with the 0.00-second mark of the target video;",
-  "<Picture 4> (from [Shot 1]) aligns with the 0.00-second mark of the target video.",
+  "<Picture 4> (from [Shot 1]) aligns with the 2.50-second mark of the target video.",
+  "（Picture 4=玉娇龙在第2.5秒才首次出场，故对齐2.50s；其他从0秒就存在）",
   "",
   "summary:",
-  "[reference_generation + keyframe_completion] 李慕白在竹林中追逐玉娇龙，两人从地面跃上竹梢短暂交手。本镜头通过场景帧锁定竹林环境和角色外观。",
+  "[reference_generation + keyframe_completion] 李慕白在竹林中追踪，玉娇龙从半空突袭，两人在竹梢短暂交手。本镜头通过场景帧锁定竹林环境和角色外观。",
   "",
   "retention_analysis:",
   "<Subject 1> (appears in [Shot 1]): fully_preserved - 角色外观由 <Picture 3> 严格锁定",
@@ -4611,14 +4644,15 @@ const REF_VIDEO_H3_RULES = [
   "<Subject 3>: weak_reference - 场景氛围作为视觉引导",
   "<Picture 1> ([Shot 1] 首帧): fully_preserved - 首帧场景构图保留",
   "<Picture 2> ([Shot 1] 尾帧): fully_preserved - 尾帧场景构图保留",
+  "Background figures: no character references apply — faces are diverse and indistinct.",
   "",
   "detailed_description:",
   "竹林深处，青翠竹干密布如幕，晨雾氤氲在竹叶间。",
-  "[Shot 1] 低角度仰拍，<Picture 1>的竹林地面。<Subject 1> 屈膝蓄力半秒，随即蹬地腾空，镜头同步上摇穿过竹干。Camera: 仰拍上摇(中幅)。",
+  "[Shot 1] 0.0s-2.5s: 低角度仰拍，<Picture 1>的竹林地面。<Subject 1> 屈膝蓄力半秒，随即蹬地腾空，镜头同步上摇穿过竹干。Camera: 仰拍上摇(中幅)。",
   "<Subject 1> 说：<d>[中文] 江湖路远，何必执着。</d>",
-  "画面切至 <Picture 2>竹梢高空。<Subject 2>自左侧斜劈青剑而来，<Subject 1>侧身以指尖格挡。",
-  "<Subject 1>与 <Subject 2>在竹梢高空短暂对峙，青翠竹叶被剑气吹得纷纷飘落。",
-  "<Subject 2>冷哼一声，剑尖微颤，脚下竹叶轻摇。镜头缓拉远，两人对峙身影渐小。",
+  "2.5s-5.0s: <Subject 2>自左侧竹梢斜劈青剑而来——她首次出场。<Subject 1>侧身以指尖格挡，两人在竹梢对峙。",
+  "5.0s-7.5s: 青翠竹叶被剑气吹得纷纷飘落。<Subject 1>与 <Subject 2>剑锋交错，互不相让。",
+  "7.5s-10.0s: <Subject 2>冷哼一声收剑，脚下竹叶轻摇。镜头缓拉远，两人对峙身影渐小。",
   "",
   "overall_soundscape:",
   "[0.0s-5.0s] 竹林深处的风声穿过竹干的呼啸声，远处隐约的鸟鸣。",
@@ -4632,7 +4666,8 @@ const REF_VIDEO_H3_RULES = [
   "",
   "subject_definitions:",
   "每个登场角色定义一个 <Subject N>。基于参考图描述实际外观。格式: <Subject N> is 角色名, 描述... in <Picture N>.",
-  "然后紧接着输出图片对齐声明：每个 <Picture N> 声明对齐时间点。格式: <Picture 1> (from [Shot 1]) aligns with the 0.00-second mark of the target video;",
+  "然后紧接着输出图片对齐声明。对齐规则：场景帧→0.00s；角色帧→该角色在「动作脚本」中首次出场的时间。",
+  "格式: <Picture N> (from [Shot 1]) aligns with the X.XX-second mark of the target video;",
   "",
   "summary:",
   "1段摘要，必须用与脚本相同的语言。如脚本为中文则摘要用中文，脚本为英文则用英文。",
@@ -4665,6 +4700,7 @@ const REF_VIDEO_H3_RULES = [
   "[ ] 对白使用 <d> 格式，语言标注正确",
   "[ ] overall_soundscape 含时间段标签，non_diegetic_music 含动态/fade",
   "[ ] 运镜术语来自H3术语表",
+  "[ ] 若画面有背景人物，已声明不受角色参考图约束",
   "",
   "=== 严禁 ===",
   "- 真实人名(导演/演员)/品牌/IP/版权角色",

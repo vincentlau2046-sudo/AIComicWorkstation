@@ -183,7 +183,9 @@
     "dof": "被写界深度",
     "sfx": "効果音",
     "music": "音楽",
-    "shot": "ショット"
+    "shot": "ショット",
+    "generateRefPrompt": "参考画像プロンプト生成",
+    "regenerateRefPrompt": "プロンプト再生成"
   },
   "storyboard": {
     "stale": "更新が必要",
