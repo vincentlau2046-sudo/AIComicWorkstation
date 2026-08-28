@@ -493,7 +493,7 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
   /** Resolve aspect ratio to (width, height) for H3 native resolution grid (32-aligned). */
   private resolveResolution(ratio: string): { width: number; height: number } {
     switch (ratio) {
-      case '16:9': return { width: 1376, height: 768 }
+      case '16:9': return { width: 1216, height: 704 }
       case '9:16': return { width: 768, height: 1376 }
       case '1:1':  return { width: 768, height: 768 }
       case '4:3':  return { width: 1024, height: 768 }
