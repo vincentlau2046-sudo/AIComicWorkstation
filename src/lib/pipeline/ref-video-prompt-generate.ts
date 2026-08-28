@@ -1,9 +1,9 @@
 /**
- * Reference Video Prompt Generate Pipeline Handler (v2).
+ * Reference Video Prompt Generate Pipeline Handler (v3).
  *
  * Generates H3 R2V 6-section video prompt via Vision LLM.
- * Now uses buildH3Input() for full context (dialogues, BGM, camera, episode).
- * Fallback: buildR2VPrompt local heuristics.
+ * Fallback: text-LLM with Qwen [tag] scene descriptions as image proxy.
+ * Both fail → failTask (user-visible error).
  */
 
 import { db } from "@/lib/db";
@@ -12,8 +12,7 @@ import { resolveAIProvider } from "@/lib/ai/provider-factory";
 import type { ModelConfigPayload } from "@/lib/ai/provider-factory";
 import { getActiveAssets } from "@/lib/shot-asset-utils";
 import { getEpisodeCharacters, assertEpisodeCharactersHaveReferences } from "@/lib/db/episode-characters";
-import { buildR2VPromptLLM } from "@/lib/ai/prompts/h3/r2v/builder";
-import { buildR2VPrompt } from "@/lib/ai/prompts/h3/r2v/ref-builder";
+import { buildR2VPromptLLM, buildR2VPromptTextLLM } from "@/lib/ai/prompts/h3/r2v/builder";
 import { resolvePrompt } from "@/lib/ai/prompts/resolver";
 import { eq } from "drizzle-orm";
 import type { Task } from "@/lib/task-queue";
@@ -78,22 +77,28 @@ export async function handleRefVideoPromptGenerate(task: Task) {
   const h3System = await resolvePrompt("ref_video_prompt_h3", { userId, projectId })
     .catch(() => undefined);
 
-  // 5. Vision LLM with fallback
-  const visionProvider = resolveAIProvider(payload.modelConfig);
+  // 5. Generate: VL first → LLM text fallback → fail
+  const aiProvider = resolveAIProvider(payload.modelConfig);
 
   let promptText: string;
-  let source: "vl" | "fallback";
+  let source: "vl" | "text_fallback";
 
   try {
-    const result = await buildR2VPromptLLM(h3Input, visionProvider, sceneFramePaths, h3System);
-    source = result.source;
-    const prefix = source === "vl" ? "[R2V-VL] " : "[R2V-LOCAL] ";
-    promptText = prefix + result.output.sections.join("\n\n");
-  } catch (err) {
-    console.warn(`[RefVideoPrompt] VL+fallback failed, using pure local: ${err}`);
-    const local = buildR2VPrompt(h3Input);
-    source = "fallback";
-    promptText = "[R2V-LOCAL] " + local.sections.join("\n\n");
+    const result = await buildR2VPromptLLM(h3Input, aiProvider, sceneFramePaths, h3System);
+    source = "vl";
+    promptText = "[R2V-VL] " + result.output.sections.join("\n\n");
+  } catch (vlErr) {
+    // VL failed — try text-LLM fallback with Qwen [tag] scene descriptions
+    console.warn(`[RefVideoPrompt] VL failed, trying text-LLM fallback: ${vlErr}`);
+    try {
+      const textResult = await buildR2VPromptTextLLM(h3Input, aiProvider, h3System);
+      source = "text_fallback";
+      promptText = "[R2V-LLM] " + textResult.sections.join("\n\n");
+    } catch (llmErr) {
+      const msg = `R2V failed — VL: ${vlErr instanceof Error ? vlErr.message : String(vlErr)} | LLM fallback: ${llmErr instanceof Error ? llmErr.message : String(llmErr)}`;
+      await failTask(task.id, msg);
+      return;
+    }
   }
 
   // 6. Store

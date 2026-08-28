@@ -319,3 +319,141 @@ function computeSegments(duration: number): Array<{ label: string }> {
   const s = Math.floor(duration / 4);
   return [{ label: `0-${s}s` }, { label: `${s}-${s*2}s` }, { label: `${s*2}-${s*3}s` }, { label: `${s*3}-${duration}s` }];
 }
+
+// ═══ Text Fallback Prompt — no images, Qwen [tag] descriptions as proxy ═══
+
+/**
+ * Build R2V prompt for text-LLM fallback.
+ * Unlike the VL version, no actual images are sent. Instead, the LLM receives
+ * the FULL Qwen [tag] scene frame descriptions — structured T2I prompts that
+ * describe each reference image in exhaustive detail.
+ */
+export async function buildR2VTextFallbackPrompt(
+  input: H3PromptInput,
+  systemOverride?: string,
+): Promise<{ system: string; user: string }> {
+  const lang = resolveLanguage(input);
+
+  // System: reuse the ref_video_prompt_h3 registry role + rules, same as VL path
+  let system = systemOverride || "";
+  if (!system) {
+    const slots = getDefaultSlotContents("ref_video_prompt_h3");
+    const role = slots?.role_definition || "";
+    const rules = slots?.rules || "";
+    system = [role, rules].filter(Boolean).join("\n\n");
+  }
+
+  const user = [
+    buildTextFallbackContentLayer(input, lang),
+    buildRefConstraintLayer(input, lang),
+    buildOutputFormat(input, lang),
+  ].join("\n\n");
+
+  return { system, user };
+}
+
+function buildTextFallbackContentLayer(input: H3PromptInput, lang: H3Language): string {
+  const L = (zh: string, en: string) => lang === "zh" ? zh : en;
+  const slots = getDefaultSlotContents("ref_video_h3_content") ?? {};
+  const r = (key: string, fallback: string) => slots[key] || fallback;
+  const out: string[] = [];
+
+  out.push(r("role_task", L(
+    "你是R2V工程师。以下是用 Qwen [tag] 文生场景图提示词展示场景参考图内容，请据此理解场景，生成完整的 R2V 视频提示词。",
+    "You are an R2V engineer. Below are Qwen [tag] T2I scene prompts that describe the reference images. Use them to understand the scene and generate a complete R2V video prompt."
+  )));
+
+  out.push("");
+  out.push(L(
+    "=== 场景参考图文本描述（Qwen [tag] 文生图提示词）===",
+    "=== SCENE REFERENCE TEXT DESCRIPTIONS (Qwen [tag] T2I prompts) ==="
+  ));
+  out.push(L(
+    "以下每个 Picture 是一张场景参考图的文本描述，使用 Qwen 文生图的结构化标签格式：",
+    "Each Picture below is a text description of one scene reference image, using Qwen T2I structured tag format:"
+  ));
+
+  let picIdx = 1;
+  for (const sf of input.sceneFrames ?? []) {
+    const label = sf.prompt || L("无描述", "no description");
+    out.push(L(
+      `<Picture ${picIdx}> 场景参考图文本描述（全文，请据此理解场景的空间布局、光影、色调、氛围）：\n${label}`,
+      `<Picture ${picIdx}> Scene reference text description (full text — use to understand spatial layout, lighting, color, atmosphere):\n${label}`
+    ));
+    picIdx++;
+  }
+
+  // Character reference images — described by name + visual hint
+  for (const ch of input.characters) {
+    if (ch.referenceImage) {
+      const desc = [ch.name, ch.visualHint, ch.performanceStyle].filter(Boolean).join(" — ");
+      out.push(L(
+        `<Picture ${picIdx}> = 角色 ${ch.name} 参考图（视觉标识: ${desc || "无"}）`,
+        `<Picture ${picIdx}> = ${ch.name} character reference (visual hint: ${desc || "none"})`
+      ));
+      picIdx++;
+    }
+  }
+
+  out.push("");
+  out.push(r("characters", L("=== 登场角色 ===", "=== CHARACTERS ===")));
+  for (let i = 0; i < input.characters.length; i++) {
+    const ch = input.characters[i];
+    if (!ch.referenceImage) continue;
+    const desc = (ch.description || "").length > 80
+      ? (ch.description || "").slice(0, 80) + "..." : (ch.description || "");
+    const attrs = [desc, ch.visualHint,
+      ch.heightCm && ch.heightCm > 0 ? `${ch.heightCm}cm/${ch.bodyType || "average"}` : null,
+      ch.performanceStyle].filter(Boolean).join(" — ");
+    out.push(L(`<Subject ${i+1}> = ${ch.name}: ${attrs}`, `<Subject ${i+1}> = ${ch.name}: ${attrs || "character"}`));
+  }
+  if (input.sceneDescription) {
+    const si = input.characters.length + 1;
+    out.push(L(`<Subject ${si}> = 场景: ${input.sceneDescription}`, `<Subject ${si}> = Scene: ${input.sceneDescription}`));
+  }
+
+  if (input.spatialHints?.length) {
+    out.push("");
+    out.push(L("=== 画面空间布局 ===", "=== SPATIAL LAYOUT ==="));
+    for (const hint of input.spatialHints) out.push(hint);
+  }
+
+  out.push("");
+  out.push(r("motion_camera", L("=== 动作脚本与运镜 ===", "=== MOTION & CAMERA ===")));
+  if (input.motionScript) out.push(L(`动作: ${input.motionScript}`, `Motion: ${input.motionScript}`));
+  if (input.videoScript) out.push(L(`视频: ${input.videoScript}`, `Video: ${input.videoScript}`));
+  if (input.cameraDirection) {
+    const cameraMapped = mapCameraDirection(input.cameraDirection);
+    out.push(L(`运镜方向: ${input.cameraDirection} → ${cameraMapped}`, `Camera Direction: ${input.cameraDirection} → ${cameraMapped}`));
+  }
+  out.push(L(`时长: ${input.duration || 10}s`, `Duration: ${input.duration || 10}s`));
+
+  // Dialogues, narrations, audio — reuse same structure as VL content layer
+  if (input.dialogues?.length) {
+    out.push("");
+    out.push(L("=== 对白 ===", "=== DIALOGUES ==="));
+    for (const d of input.dialogues) {
+      const si = input.characters.findIndex(c => c.name === d.characterName);
+      const sl = si >= 0 ? ` (S${si+1})` : "";
+      out.push(L(`${d.characterName}${sl} 说：<d>[中文] ${d.text}</d>`,
+        `${d.characterName}${sl} says: <d>[English] ${d.text}</d>`));
+    }
+  } else {
+    out.push(L("=== 对白 ===\n无对话", "=== DIALOGUES ===\nNo dialogue"));
+  }
+
+  if (input.narrations?.length) {
+    out.push("");
+    out.push(L("=== 旁白（已预生成）===", "=== Narration ==="));
+    out.push(input.narrations.join("\n"));
+  }
+  if (input.innerMonologues?.length) {
+    out.push("");
+    out.push(L("=== 内心独白（已预生成）===", "=== Inner Monologue ==="));
+    out.push(input.innerMonologues.join("\n"));
+  }
+
+  if (input.soundDesign) out.push(L(`\n音效: ${input.soundDesign}`, `\nSound: ${input.soundDesign}`));
+
+  return out.join("\n");
+}

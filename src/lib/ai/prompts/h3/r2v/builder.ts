@@ -1,23 +1,21 @@
 // ═══════════════════════════════════════════════
-// H3 R2V Builder — Vision LLM + local fallback (v0.3.9)
-// Follows FL2V pattern: LLM → Registry template → parse → fallback.
-// R2V unique: includes reference images (scene frames + characters).
+// H3 R2V Builder — Vision LLM + text-LLM fallback (v0.3.10)
+// VL call → throw on failure → caller tries text-LLM → failTask on both.
 // ═══════════════════════════════════════════════
 
 import type { AIProvider } from "@/lib/ai/types";
 import type { H3PromptInput, H3PromptOutput } from "../types";
-import { buildR2VPromptTemplate } from "./prompt-template";
-import { buildR2VPrompt } from "./ref-builder";
+import { buildR2VPromptTemplate, buildR2VTextFallbackPrompt } from "./prompt-template";
 import { resolveLanguage } from "../shared/base-builder";
 
 /**
  * R2V Vision LLM builder.
  *
- * Phase 1 (try): Vision LLM with reference images → 6-section H3 prompt.
- * Phase 2 (fallback): local heuristics via buildR2VPrompt (no images).
+ * Sends scene reference images + context to the VL model.
+ * On failure → throws (caller handles text-LLM fallback).
  *
  * @param input — full H3PromptInput (characters, scenes, motion, etc.)
- * @param visionProvider — AI provider with vision support (gemma4-31b-vl, qwen3-vl, etc.)
+ * @param visionProvider — AI provider with vision support
  * @param sceneFramePaths — file paths for scene frame images (0-4 per shot)
  * @param systemOverride — optional Registry slot override for system prompt
  */
@@ -26,38 +24,57 @@ export async function buildR2VPromptLLM(
   visionProvider: AIProvider,
   sceneFramePaths: string[],
   systemOverride?: string,
-): Promise<{ output: H3PromptOutput; source: "vl" | "fallback" }> {
+): Promise<{ output: H3PromptOutput; source: "vl" }> {
   const lang = resolveLanguage(input);
 
-  try {
-    const { system, user } = await buildR2VPromptTemplate(input, systemOverride);
+  const { system, user } = await buildR2VPromptTemplate(input, systemOverride);
 
-    const raw = await visionProvider.generateText(user, {
-      systemPrompt: system,
-      images: sceneFramePaths,
-      temperature: 0.7,
-    });
+  const raw = await visionProvider.generateText(user, {
+    systemPrompt: system,
+    images: sceneFramePaths,
+    temperature: 0.7,
+  });
 
-    if (!raw?.trim()) throw new Error("[H3-R2V] Empty VL response");
+  if (!raw?.trim()) throw new Error("[H3-R2V] Empty VL response");
 
-    // R2V output is already a complete 6-section text — no parsing needed.
-    // Store as single section; handler joins and stores as shot.videoPrompt.
-    const sections = [raw.trim()];
+  return {
+    output: {
+      mode: "ref2va" as const,
+      taskType: "reference_generation" as const,
+      languageUsed: lang === "zh" ? "zh" : "en",
+      sections: [raw.trim()],
+    },
+    source: "vl",
+  };
+}
 
-    return {
-      output: {
-        mode: "ref2va" as const,
-        taskType: "reference_generation" as const,
-        languageUsed: lang === "zh" ? "zh" : "en",
-        sections,
-      },
-      source: "vl",
-    };
-  } catch (e) {
-    console.warn("[H3-R2V] VL call failed, falling back to local builder:", (e as Error).message);
-    return {
-      output: buildR2VPrompt(input),
-      source: "fallback",
-    };
-  }
+/**
+ * LLM text fallback builder.
+ *
+ * Uses Qwen [tag] scene frame descriptions as image proxy.
+ * No actual images are sent — the LLM understands the scene purely from the
+ * structured T2I prompt text that describes each reference image.
+ */
+export async function buildR2VPromptTextLLM(
+  input: H3PromptInput,
+  textProvider: AIProvider,
+  systemOverride?: string,
+): Promise<H3PromptOutput> {
+  const lang = resolveLanguage(input);
+
+  const { system, user } = await buildR2VTextFallbackPrompt(input, systemOverride);
+
+  const raw = await textProvider.generateText(user, {
+    systemPrompt: system,
+    temperature: 0.7,
+  });
+
+  if (!raw?.trim()) throw new Error("[H3-R2V-LLM] Empty LLM response");
+
+  return {
+    mode: "ref2va" as const,
+    taskType: "reference_generation" as const,
+    languageUsed: lang === "zh" ? "zh" : "en",
+    sections: [raw.trim()],
+  };
 }
