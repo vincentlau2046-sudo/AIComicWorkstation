@@ -86,6 +86,7 @@ export async function handleShotSplit(task: Task) {
   if (targetDuration && targetDuration > 0) {
     userPrompt += `\n\nTarget total duration: ${targetDuration} seconds (${Math.floor(targetDuration / 60)}m${targetDuration % 60}s). Ensure all shot durations sum to approximately this target.\n`;
   }
+  console.log('[ShotSplit DEBUG] system prompt contains environmentPrompts:', systemPrompt.includes('environmentPrompts'));
   const result = await ai.generateText(
     userPrompt,
     { systemPrompt, temperature: 0.5 }
@@ -126,7 +127,7 @@ export async function handleShotSplit(task: Task) {
         narrations: Array.isArray(shotData.narrations) ? JSON.stringify(shotData.narrations) : "[]",
         innerMonologues: Array.isArray(shotData.innerMonologues) ? JSON.stringify(shotData.innerMonologues) : "[]",
         environmentPrompts: Array.isArray(shotData.environmentPrompts) ? JSON.stringify(shotData.environmentPrompts) : (Array.isArray(shotData.environment_prompts) ? JSON.stringify(shotData.environment_prompts) : "[]"),
-        characters: Array.isArray(shotData.characters) ? JSON.stringify(shotData.characters) : "[]",
+        characters: Array.isArray(shotData.characters) ? JSON.stringify(shotData.characters) : (Array.isArray(shotData.character_names) ? JSON.stringify(shotData.character_names) : "[]"),
         timeOfDay: (shotData.timeOfDay as string) || (shotData.time_of_day as string) || null,
         timeline: (shotData.timeline as string) || null,
         episodeId: payload.episodeId ?? null,
