@@ -286,6 +286,12 @@ export async function POST(
   }
 
   if (action === "single_ref_image_generate") {
+    // Reset the target asset's status to "pending" so the task worker
+    // will pick it up, even if it was previously completed.
+    const refImageId = payload?.refImageId as string | undefined;
+    if (refImageId) {
+      await db.update(shotAssets).set({ status: "pending", updatedAt: new Date() }).where(eq(shotAssets.id, refImageId));
+    }
     return enqueueSingleTask(projectId, payload, modelConfig, "scene_frame_generate");
   }
 
