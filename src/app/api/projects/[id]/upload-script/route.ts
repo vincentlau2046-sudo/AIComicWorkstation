@@ -83,6 +83,80 @@ interface EpisodeResult {
   idea: string;
 }
 
+// ---------------------------------------------------------------------------
+// Response parsing
+// ---------------------------------------------------------------------------
+// The script_split prompt asks for structured text markers, not JSON:
+//   === 分集 1 ===  (or === Episode 1 ===)
+//   标题: ...        Title: ...
+//   描述: ...        Description: ...
+//   关键词: ...      Keywords: ...
+//   角色: ...        Characters: ...
+//   剧情构思:        Plot idea:
+//   <multi-line body until next === separator>
+// Parse that marker format into EpisodeResult[]. Falls back to JSON.parse
+// when the model ignored the prompt and emitted JSON anyway (issue #2).
+function parseEpisodeMarkers(text: string): EpisodeResult[] {
+  const blockRe = /={2,}\s*(?:分集|Episode)\s*(\d+)\s*={2,}/g;
+  const indices: number[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = blockRe.exec(text)) !== null) {
+    indices.push(m.index);
+  }
+  if (indices.length === 0) return [];
+  indices.push(text.length);
+
+  const labelRe = /^\s*(标题|Title)\s*[:：]\s*(.*)$/i;
+  const descRe = /^\s*(描述|Description)\s*[:：]\s*(.*)$/i;
+  const kwRe = /^\s*(关键词|Keywords)\s*[:：]\s*(.*[^\s].*)$/i;
+  const charRe = /^\s*(角色|Characters)\s*[:：]\s*(.*)$/i;
+  const ideaRe = /^\s*(剧情构思|Plot idea)\s*[:：]\s*$/i;
+
+  const results: EpisodeResult[] = [];
+  for (let i = 0; i < indices.length - 1; i++) {
+    const block = text.slice(indices[i], indices[i + 1]);
+    // Drop the leading separator line so it does not pollute the body.
+    const body = block.split(/\n/).slice(1).join("\n");
+    let title = "";
+    let description = "";
+    let keywords = "";
+    let characters = "";
+    const ideaLines: string[] = [];
+    let inIdea = false;
+    for (const line of body.split(/\n/)) {
+      if (inIdea) {
+        ideaLines.push(line);
+        continue;
+      }
+      let lm: RegExpMatchArray | null;
+      if ((lm = line.match(labelRe))) { title = lm[2].trim(); }
+      else if ((lm = line.match(descRe))) { description = lm[2].trim(); }
+      else if ((lm = line.match(kwRe))) { keywords = lm[2].trim(); }
+      else if ((lm = line.match(charRe))) { characters = lm[2].trim(); }
+      else if (ideaRe.test(line)) { inIdea = true; }
+    }
+    const idea = ideaLines.join("\n").trim();
+    if (!title && !description && !idea) continue;
+    const fullIdea = characters
+      ? `角色: ${characters}\n${idea}`
+      : idea;
+    results.push({ title, description, keywords, idea: fullIdea });
+  }
+  return results;
+}
+
+function parseEpisodes(text: string): EpisodeResult[] {
+  const markers = parseEpisodeMarkers(text);
+  if (markers.length > 0) return markers;
+  try {
+    const parsed = JSON.parse(extractJSON(text)) as EpisodeResult[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    console.error("[UploadScript] failed to parse response (no markers, JSON.parse failed). head:", text.slice(0, 200));
+    return [];
+  }
+}
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -165,7 +239,7 @@ export async function POST(
       temperature: 0.5,
     });
 
-    const parsed = JSON.parse(extractJSON(result.text)) as EpisodeResult[];
+    const parsed = parseEpisodes(result.text);
     return parsed;
   });
 
