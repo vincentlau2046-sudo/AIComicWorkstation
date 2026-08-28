@@ -31,6 +31,20 @@ async function checkComfyHealth(): Promise<boolean> {
   return comfyHealthy;
 }
 
+/** Free ComfyUI GPU memory before each task — prevents OOM from stale model allocations. */
+async function freeComfyMemory(): Promise<void> {
+  try {
+    await fetch(`${COMFYUI_BASE_URL}/free`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ unload_models: true, free_memory: true }),
+      signal: AbortSignal.timeout(5000),
+    });
+  } catch {
+    // best-effort
+  }
+}
+
 export function registerHandlers(newHandlers: TaskHandlerMap) {
   handlers = { ...handlers, ...newHandlers };
 }
@@ -68,6 +82,7 @@ async function poll() {
 
     // ── Path A: ComfyUI tasks — serial, one at a time ──
     if (ok && !comfyActive) {
+      await freeComfyMemory();
       const comfyTask = await dequeueTask({ skipComfy: false });
       console.log(`[Worker] Path A dequeue: ComfyUI=${ok}, comfyActive=${comfyActive}, found=${!!comfyTask}`);
       if (comfyTask) runTask(comfyTask, true);
