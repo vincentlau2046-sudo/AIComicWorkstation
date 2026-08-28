@@ -1934,6 +1934,12 @@ async function handleShotSplitStream(
           depthOfField: shot.depthOfField || "medium",
           soundDesign: shot.soundDesign || "",
           musicCue: shot.musicCue || "",
+          narrations: Array.isArray(shot.narrations) ? JSON.stringify(shot.narrations) : "[]",
+          innerMonologues: Array.isArray(shot.innerMonologues) ? JSON.stringify(shot.innerMonologues) : "[]",
+          environmentPrompts: Array.isArray(shot.environmentPrompts) ? JSON.stringify(shot.environmentPrompts) : (Array.isArray(shot.environment_prompts) ? JSON.stringify(shot.environment_prompts) : "[]"),
+          characters: Array.isArray(shot.characters) ? JSON.stringify(shot.characters) : "[]",
+          timeOfDay: (shot.timeOfDay as string) || (shot.time_of_day as string) || null,
+          timeline: (shot.timeline as string) || null,
           episodeId: episodeId ?? null,
         });
         for (let i = 0; i < (shot.dialogues || []).length; i++) {
@@ -2059,6 +2065,11 @@ async function handleShotSplitStream(
     referenceImagePrompts?: string[];
     narrations?: Array<{ text: string; type: string; character?: string; timeHint?: string }>;
     innerMonologues?: Array<{ text: string; type: string; character?: string; timeHint?: string }>;
+    environmentPrompts?: string[];
+    environment_prompts?: string[];
+    timeOfDay?: string;
+    time_of_day?: string;
+    timeline?: string;
   };
 
   // Process chunks concurrently
@@ -2195,6 +2206,10 @@ async function handleShotSplitStream(
       musicCue: shot.musicCue || "",
       narrations: JSON.stringify(shot.narrations ?? []),
       innerMonologues: JSON.stringify(shot.innerMonologues ?? []),
+      environmentPrompts: Array.isArray(shot.environmentPrompts) ? JSON.stringify(shot.environmentPrompts) : (Array.isArray(shot.environment_prompts) ? JSON.stringify(shot.environment_prompts) : "[]"),
+      characters: Array.isArray(shot.characters) ? JSON.stringify(shot.characters) : "[]",
+      timeOfDay: (shot.timeOfDay as string) || (shot.time_of_day as string) || null,
+      timeline: (shot.timeline as string) || null,
       episodeId: episodeId ?? null,
     });
     // No automatic asset seeding — shot_assets rows are only created when
