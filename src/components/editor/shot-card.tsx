@@ -735,6 +735,20 @@ export function ShotCard({
     setRegeneratingRefIds((prev) => new Set(prev).add(refId));
 
     try {
+      // Flush any pending debounced save for this refId first
+      if (refPromptTimerRef.current[refId]) {
+        clearTimeout(refPromptTimerRef.current[refId]);
+        delete refPromptTimerRef.current[refId];
+      }
+      // Save the current local value immediately so the DB is up to date
+      const currentPrompt = localRefPrompts[refId];
+      if (currentPrompt !== undefined) {
+        const updated = parsedRefImages.map((r) =>
+          r.id === refId ? { ...r, prompt: currentPrompt } : r
+        );
+        await saveRefImages(updated);
+      }
+
       // Get per-card model (if set) or fall back to global
       const ref = parsedRefImages.find((r) => r.id === refId);
       const baseConfig = getModelConfig();
