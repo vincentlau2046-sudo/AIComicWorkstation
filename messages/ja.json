@@ -95,7 +95,9 @@
     "kanbanBatchGenerate": "一括生成 ({count})",
     "continueFromPrev": "前話から続ける",
     "continueFromPrevTooltip": "前話の最後のフレームを最初のフレームとして使用",
-    "prevEpisodeNoFrames": "前話のフレームが未生成です"
+    "prevEpisodeNoFrames": "前話のフレームが未生成です",
+    "targetDuration": "目標時間（秒）",
+    "noTargetDuration": "目標時間が未設定のため、自由な構成で進めます"
   },
   "character": {
     "name": "キャラクター名",
@@ -230,7 +232,8 @@
     "mergeError": "結合に失敗しました",
     "mergeMinTwo": "2話以上選択してください",
     "mergeNoVideo": "動画がまだ合成されていません",
-    "downloadVideo": "動画をダウンロード"
+    "downloadVideo": "動画をダウンロード",
+    "defaultDuration": "デフォルト時間（秒）"
   },
   "import": {
     "title": "脚本インポート",

@@ -449,14 +449,33 @@ async function handleScriptGenerate(
       .where(eq(projects.id, projectId));
   }
 
+  // === 目标时长：集级优先，回退项目级；均为 0 = 自由发挥 ===
+  const [projDurRow] = await db
+    .select({ targetDuration: projects.targetDuration })
+    .from(projects)
+    .where(eq(projects.id, projectId));
+  let epDurValue = 0;
+  if (episodeId) {
+    const [epDurRow] = await db
+      .select({ targetDuration: episodes.targetDuration })
+      .from(episodes)
+      .where(eq(episodes.id, episodeId));
+    epDurValue = epDurRow?.targetDuration ?? 0;
+  }
+  const targetDur = epDurValue > 0 ? epDurValue : (projDurRow?.targetDuration ?? 0);
+  const durationContext =
+    targetDur > 0
+      ? `\n\n【目标时长】本集目标时长：${targetDur}秒（按每镜头约 8 秒规划，镜头数 ≈ ${Math.round(targetDur / 8)} 个镜头）\n\n`
+      : `\n\n【目标时长】未设置目标时长，按故事节奏自由展开，不做镜头数限制\n\n`;
+
   // === 智能体路由（流式）===
   const sgBoundAgent = await findBoundAgent(projectId, "script_generate");
   if (sgBoundAgent) {
     try {
       const outline = (payload?.outline as string) || "";
-      const agentPrompt = outline
+      const agentPrompt = (outline
         ? `创意构想：${idea}\n\n故事大纲：${outline}`
-        : `创意构想：${idea}`;
+        : `创意构想：${idea}`) + durationContext;
       const agentStream = await callAgentStream(
         { platform: sgBoundAgent.platform as "bailian" | "dify" | "coze", appId: sgBoundAgent.appId, apiKey: sgBoundAgent.apiKey },
         agentPrompt,
@@ -606,7 +625,7 @@ async function handleScriptGenerate(
   const result = streamText({
     model,
     system: scriptGenerateSystem,
-    prompt: styleContext + characterContext + worldSettingContext + outlineContext + buildScriptGeneratePrompt(idea),
+    prompt: durationContext + styleContext + characterContext + worldSettingContext + outlineContext + buildScriptGeneratePrompt(idea),
     temperature: 0.8,
     onFinish: async ({ text }) => {
       try {

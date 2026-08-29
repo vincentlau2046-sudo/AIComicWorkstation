@@ -22,6 +22,7 @@ export function ScriptEditor() {
   const [generating, setGenerating] = useState(false);
   const [generatingOutline, setGeneratingOutline] = useState(false);
   const [outline, setOutline] = useState(project?.outline || "");
+  const [targetDur, setTargetDur] = useState<number>(project?.targetDuration ?? 0);
   const [parsing, setParsing] = useState(false);
   const [parseResult, setParseResult] = useState<{ sceneCount: number; dialogueCount: number; scenes: any[] } | null>(null);
   const [parseExpanded, setParseExpanded] = useState(false);
@@ -29,7 +30,11 @@ export function ScriptEditor() {
   const textGuard = useModelGuard("text");
   const scriptTextareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // Compute parse result from stored screenplay on mount
+  // Compute parse result from stored screenplay on mount.
+  // CRITICAL: when the current episode has no stored screenplay (e.g. only
+  // the outline is done, no generated script yet), the previous episode's
+  // parse result must be cleared — otherwise stale "剧本结构化" output from
+  // EP01/EP02 leaks into EP03's page after client-side navigation.
   useEffect(() => {
     if (project?.screenplay) {
       try {
@@ -41,6 +46,8 @@ export function ScriptEditor() {
           scenes,
         });
       } catch { setParseResult(null); }
+    } else {
+      setParseResult(null);
     }
   }, [project?.screenplay]);
 
@@ -91,6 +98,39 @@ export function ScriptEditor() {
       persistNow();
     }, 1500);
   }, [persistNow]);
+
+  // 目标时长（集级）：与 store 同步 + 防抖持久化到 episodes.target_duration
+  const targetDurRef = useRef(targetDur);
+  useEffect(() => {
+    targetDurRef.current = targetDur;
+  }, [targetDur]);
+  useEffect(() => {
+    if (project?.targetDuration !== undefined) {
+      setTargetDur(project.targetDuration || 0);
+    }
+  }, [project?.targetDuration]);
+  const targetDurDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const persistTargetDur = useCallback(async () => {
+    const state = useProjectStore.getState();
+    const proj = state.project;
+    const episodeId = state.currentEpisodeId;
+    if (!proj || !episodeId) return;
+    try {
+      await apiFetch(`/api/projects/${proj.id}/episodes/${episodeId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetDuration: targetDurRef.current || 0 }),
+      });
+    } catch (err) {
+      console.error("Target duration save error:", err);
+    }
+  }, []);
+  const scheduleTargetDurSave = useCallback(() => {
+    if (targetDurDebounceRef.current) clearTimeout(targetDurDebounceRef.current);
+    targetDurDebounceRef.current = setTimeout(() => {
+      persistTargetDur();
+    }, 1500);
+  }, [persistTargetDur]);
 
   // Clean up debounce on unmount and flush pending save
   useEffect(() => {
@@ -271,6 +311,32 @@ export function ScriptEditor() {
       }
 
       await fetchProject(project.id, currentEpisodeId ?? undefined);
+
+      // 质量闸（不阻塞）：时长设置提示 + 声音密度 80% 基线检查
+      const fresh = useProjectStore.getState().project;
+      const scriptText = fresh?.script || "";
+      const dur = fresh?.targetDuration ?? 0;
+      if (dur === 0) {
+        toast.info(t("project.noTargetDuration") || "未设置目标时长，本次按自由发挥规划");
+      }
+      if (scriptText) {
+        const parts = scriptText.split(/^(?=场景\s*\d+)/m);
+        let totalScenes = 0;
+        let voicedScenes = 0;
+        for (let i = 1; i < parts.length; i++) {
+          totalScenes++;
+          const p = parts[i];
+          const hasDialogue = /"[^"]*"/.test(p) || /“[^”]*”/.test(p);
+          const hasNarration = /^旁白[：:]/m.test(p);
+          const hasInner = /（内心）/.test(p);
+          if (hasDialogue || hasNarration || hasInner) voicedScenes++;
+        }
+        if (totalScenes > 0 && voicedScenes / totalScenes < 0.8) {
+          toast.warning(
+            `声音密度 ${Math.round((voicedScenes / totalScenes) * 100)}% 低于 80% 基线：部分镜头缺少对白/旁白/内心戏，建议重新生成以补全声音层`
+          );
+        }
+      }
     } catch (err) {
       console.error("Script generate error:", err);
       toast.error(t("common.generationFailed"));
@@ -293,6 +359,24 @@ export function ScriptEditor() {
           </h2>
         </div>
         <div className="flex items-center gap-2">
+          <label className="flex items-center gap-1.5 text-[11px] text-[--text-muted]">
+            {t("project.targetDuration") || "目标时长（秒）"}
+            <input
+              type="number"
+              min={0}
+              value={targetDur}
+              onChange={(e) => {
+                const raw = e.target.value;
+                const num = raw === "" ? 0 : Math.max(0, parseInt(raw, 10) || 0);
+                setTargetDur(num);
+                useProjectStore.setState((state) => ({
+                  project: state.project ? { ...state.project, targetDuration: num } : null,
+                }));
+                scheduleTargetDurSave();
+              }}
+              className="w-16 rounded-lg border border-[--border-subtle] bg-[--surface] px-2 py-1 text-xs text-[--text-primary] focus:outline-none focus:ring-2 focus:ring-primary/40"
+            />
+          </label>
           <PromptEditButton promptKeys={["script_outline", "script_generate", "script_parse"]} projectId={project.id} />
           <InlineModelPicker capability="text" />
           {saving && (

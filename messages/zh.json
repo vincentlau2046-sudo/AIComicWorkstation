@@ -115,7 +115,9 @@
     "styleEra": "时代美学",
     "styleEraPlaceholder": "选择时代...",
     "styleMood": "情绪方向",
-    "styleMoodPlaceholder": "选择情绪方向..."
+    "styleMoodPlaceholder": "选择情绪方向...",
+    "targetDuration": "目标时长（秒）",
+    "noTargetDuration": "未设置目标时长，本次按自由发挥规划"
   },
   "character": {
     "name": "角色名",
@@ -254,7 +256,8 @@
     "mergeError": "合并失败",
     "mergeMinTwo": "请至少选择 2 集",
     "mergeNoVideo": "该分集尚未合成视频",
-    "downloadVideo": "下载视频"
+    "downloadVideo": "下载视频",
+    "defaultDuration": "默认时长（秒）"
   },
   "import": {
     "title": "导入剧本",
@@ -550,7 +553,7 @@
       "refImageOutput": "参考图输出格式",
       "refImageOutputDesc": "参考图提示词的JSON输出格式",
       "extractionRules": "提取规则",
-      "extractionRulesDesc": "从文本中提取角色的规则",
+      "extractionRulesDesc": "角色穷举提取的规则",
       "styleMatching": "风格匹配",
       "styleMatchingDesc": "与角色参考图的风格一致性规则",
       "faceDetail": "面部细节",
@@ -623,14 +626,14 @@
       "characterLabelDesc": "Character Label slot for H3 prompt template",
       "contentInject": "Content Inject",
       "contentInjectDesc": "Content Inject slot for H3 prompt template",
-      "detectionRules": "Detection Rules",
-      "detectionRulesDesc": "Detection Rules slot for H3 prompt template",
+      "detectionRules": "检测规则",
+      "detectionRulesDesc": "弧光检测判定规则",
       "dialogue": "Dialogue",
       "dialogueDesc": "Dialogue slot for H3 prompt template",
       "dialogueLabel": "Dialogue Label",
       "dialogueLabelDesc": "Dialogue Label slot for H3 prompt template",
-      "dimensions": "Dimensions",
-      "dimensionsDesc": "Dimensions slot for H3 prompt template",
+      "dimensions": "评估维度",
+      "dimensionsDesc": "项目定位分析维度",
       "episodeLabel": "Episode Label",
       "episodeLabelDesc": "Episode Label slot for H3 prompt template",
       "format": "Format",
@@ -647,8 +650,8 @@
       "outputDesc": "Output slot for H3 prompt template",
       "outputZh": "Output Zh",
       "outputZhDesc": "Output Zh slot for H3 prompt template",
-      "phaseRules": "Phase Rules",
-      "phaseRulesDesc": "Phase Rules slot for H3 prompt template",
+      "phaseRules": "阶段规则",
+      "phaseRulesDesc": "弧光阶段拆分规则",
       "presenceRules": "Presence Rules",
       "presenceRulesDesc": "Presence Rules slot for H3 prompt template",
       "principles": "Principles",
@@ -681,16 +684,8 @@
       "changeRulesDesc": "Phase R2I 视觉变化应用规则",
       "outputStandard": "输出标准",
       "outputStandardDesc": "Phase R2I 输出质量标准",
-      "extractionRules": "提取规则",
-      "extractionRulesDesc": "角色穷举提取的规则",
       "splitRules": "拆分规则",
-      "splitRulesDesc": "剧集拆分规则",
-      "detectionRules": "检测规则",
-      "detectionRulesDesc": "弧光检测判定规则",
-      "phaseRules": "阶段规则",
-      "phaseRulesDesc": "弧光阶段拆分规则",
-      "dimensions": "评估维度",
-      "dimensionsDesc": "项目定位分析维度"
+      "splitRulesDesc": "剧集拆分规则"
     }
   },
   "categories": {}

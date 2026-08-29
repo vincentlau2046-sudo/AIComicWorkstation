@@ -209,6 +209,8 @@ interface Project {
   visualStyleKey?: string;
   eraAesthetic?: string;
   moodDirection?: string;
+  /** 目标时长（秒）。集级字段，0 或 undefined = 自由发挥。 */
+  targetDuration?: number;
   characters: Character[];
   shots: Shot[];
   versions: StoryboardVersion[];

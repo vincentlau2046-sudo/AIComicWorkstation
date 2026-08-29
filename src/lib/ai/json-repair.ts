@@ -34,12 +34,16 @@ export function repairJSON(raw: string): string {
   // ── Pass 1: Strip trailing commas ──────────────────────────
   result = result.replace(/,(\s*[}\]])/g, "$1");
 
-  // ── Pass 2: Fix unescaped newlines inside string values ────
+  // ── Pass 2: Fix unescaped newlines AND unescaped inner quotes in string values ──
   // Walk character-by-character to track in-string state.
-  // Inside a JSON string: literal \n → escaped \\n.
+  //  a) Inside a JSON string: literal \n → escaped \n.
+  //  b) A `"` inside a string whose next non-whitespace char is NOT one of
+  //     , } ] : (or end of text) is an unescaped content quote →
+  //     replace with Chinese quotes “ / ” (alternating open/close).
   const chars: string[] = [];
   let inString = false;
   let escape = false;
+  let innerQuoteOpen = false;
   for (let i = 0; i < result.length; i++) {
     const ch = result[i];
     if (escape) {
@@ -53,8 +57,22 @@ export function repairJSON(raw: string): string {
       continue;
     }
     if (ch === '"') {
-      inString = !inString;
-      chars.push(ch);
+      if (!inString) {
+        inString = true;
+        innerQuoteOpen = false;
+        chars.push(ch);
+      } else {
+        let j = i + 1;
+        while (j < result.length && /\s/.test(result[j])) j++;
+        const nxt = result[j];
+        if (nxt === undefined || nxt === "," || nxt === "}" || nxt === "]" || nxt === ":") {
+          inString = false;
+          chars.push(ch);
+        } else {
+          chars.push(innerQuoteOpen ? "”" : "“");
+          innerQuoteOpen = !innerQuoteOpen;
+        }
+      }
       continue;
     }
     if (inString && ch === "\n") {

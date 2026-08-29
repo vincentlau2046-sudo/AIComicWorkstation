@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, use } from "react";
+import { useEffect, useRef, useState, useCallback, use } from "react";
 import { useTranslations, useLocale } from "next-intl";
 import { Layers, Plus, Loader2, Users, X, Upload, FileUp, Merge, Download } from "lucide-react";
 import { uploadUrl } from "@/lib/utils/upload-url";
@@ -40,6 +40,39 @@ export default function EpisodesPage({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [merging, setMerging] = useState(false);
   const [mergedVideoUrl, setMergedVideoUrl] = useState<string | null>(null);
+
+  // 项目级默认目标时长（秒），写入 projects.target_duration
+  const [defaultDur, setDefaultDur] = useState<number>(project?.targetDuration ?? 0);
+  const defaultDurRef = useRef(defaultDur);
+  const defaultDurDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    defaultDurRef.current = defaultDur;
+  }, [defaultDur]);
+  useEffect(() => {
+    if (project?.targetDuration !== undefined) {
+      setDefaultDur(project.targetDuration || 0);
+    }
+  }, [project?.targetDuration]);
+  const scheduleDefaultDurSave = useCallback(() => {
+    if (defaultDurDebounceRef.current) clearTimeout(defaultDurDebounceRef.current);
+    defaultDurDebounceRef.current = setTimeout(async () => {
+      try {
+        await apiFetch(`/api/projects/${projectId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ targetDuration: defaultDurRef.current || 0 }),
+        });
+        const state = useProjectStore.getState();
+        if (state.project) {
+          useProjectStore.setState((s) => ({
+            project: s.project ? { ...s.project, targetDuration: defaultDurRef.current || 0 } : null,
+          }));
+        }
+      } catch (err) {
+        console.error("Default duration save error:", err);
+      }
+    }, 1500);
+  }, [projectId]);
 
   useEffect(() => {
     fetchEpisodes(projectId);
@@ -150,6 +183,21 @@ export default function EpisodesPage({
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <label className="flex items-center gap-1.5 text-[11px] text-[--text-muted]">
+            {t("defaultDuration") || "默认时长（秒）"}
+            <input
+              type="number"
+              min={0}
+              value={defaultDur}
+              onChange={(e) => {
+                const raw = e.target.value;
+                const num = raw === "" ? 0 : Math.max(0, parseInt(raw, 10) || 0);
+                setDefaultDur(num);
+                scheduleDefaultDurSave();
+              }}
+              className="w-16 rounded-lg border border-[--border-subtle] bg-white px-2 py-1 text-xs text-[--text-primary] focus:outline-none focus:ring-2 focus:ring-primary/40"
+            />
+          </label>
           <Link
             href={`/${locale}/project/${projectId}/import`}
             className="inline-flex items-center gap-1.5 rounded-[10px] border border-[--border-subtle] bg-white px-3.5 py-2 text-sm font-medium text-[--text-secondary] shadow-sm transition-all hover:border-primary/20 hover:text-primary"

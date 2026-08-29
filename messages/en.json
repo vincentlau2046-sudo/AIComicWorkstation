@@ -114,7 +114,9 @@
     "styleEra": "Era Aesthetic",
     "styleEraPlaceholder": "Select era...",
     "styleMood": "Mood Direction",
-    "styleMoodPlaceholder": "Select mood..."
+    "styleMoodPlaceholder": "Select mood...",
+    "targetDuration": "Target duration (sec)",
+    "noTargetDuration": "No target duration set — planning with free pacing"
   },
   "character": {
     "name": "Character Name",
@@ -249,7 +251,8 @@
     "mergeError": "Merge failed",
     "mergeMinTwo": "Select at least 2 episodes",
     "mergeNoVideo": "Episode video not yet composed",
-    "downloadVideo": "Download Video"
+    "downloadVideo": "Download Video",
+    "defaultDuration": "Default duration (sec)"
   },
   "import": {
     "title": "Import Script",

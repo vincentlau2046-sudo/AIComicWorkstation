@@ -95,7 +95,9 @@
     "kanbanBatchGenerate": "일괄 생성 ({count})",
     "continueFromPrev": "이전 회차 이어서",
     "continueFromPrevTooltip": "이전 회차의 마지막 프레임을 첫 프레임으로 사용",
-    "prevEpisodeNoFrames": "이전 회차에 생성된 프레임이 없습니다"
+    "prevEpisodeNoFrames": "이전 회차에 생성된 프레임이 없습니다",
+    "targetDuration": "목표 시간(초)",
+    "noTargetDuration": "목표 시간이 설정되지 않아 자유롭게 구성됩니다"
   },
   "character": {
     "name": "캐릭터 이름",
@@ -230,7 +232,8 @@
     "mergeError": "합치기 실패",
     "mergeMinTwo": "2개 이상 선택하세요",
     "mergeNoVideo": "아직 영상이 합성되지 않았습니다",
-    "downloadVideo": "영상 다운로드"
+    "downloadVideo": "영상 다운로드",
+    "defaultDuration": "기본 시간(초)"
   },
   "import": {
     "title": "각본 가져오기",
