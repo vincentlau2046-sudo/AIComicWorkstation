@@ -274,7 +274,7 @@ retention_analysis 末尾追加: Background figures: no character references app
 含时间段标签: [0.0s-3.0s] 寒风... [3.0s-6.0s] 踏雪声...
 
 【6】non_diegetic_music:
-中文。乐器+速度+动态。例如: 大提琴缓慢弦乐，极轻(pp)开始，6.0s渐强至中弱(mp)，持续至视频结束（配乐应贯穿整段，不要逐镜渐弱至无声）。
+中文。乐器+速度+动态。例如: 大提琴缓慢弦乐，极轻(pp)开始，6.0s渐强至中弱(mp)，持续至镜头结束。注意: 配乐不是独立片段——遵循系统 prompt 中的「配乐叙述原则」（L-cut延续/Hitchcock沉默/叙事驱动）。
 
 禁止: 省略section, markdown, 重复运镜, 中文body内的冗长英文叙述`,
     `=== OUTPUT FORMAT (FOLLOW OFFICIAL Ref2VA 6-SECTION ORDER) ===
@@ -320,7 +320,7 @@ append to detailed_description: Note: figures other than the defined <Subject N>
 Chinese. Ambience summary. Time-anchored. No shot-specific SFX (they go in detailed_description).
 
 【6】non_diegetic_music:
-Chinese. Instrument + tempo + dynamics; the music sustains through to the end of the video — do NOT fade out at each shot boundary.
+Chinese. Instrument + tempo + dynamics. The music is not an isolated fragment — follow the Music Narrative Principles (L-cut continuity / Hitchcock silence / narrative-driven scoring). End with "sustains to end of shot" unless the narrative calls for silence.
 
 FORBIDDEN: skip sections, markdown, repeated camera, English content in Chinese body
   `
