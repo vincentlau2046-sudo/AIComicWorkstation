@@ -490,23 +490,26 @@ export class ComfyUIProvider implements AIProvider, VideoProvider {
     inputs.length = Math.min(Math.max(17, Math.round(totalFrames / 17) * 17), 3600)
   }
 
-  /** Resolve aspect ratio to (width, height) for H3 native resolution grid (32-aligned). */
+  /** Resolve aspect ratio to (width, height) for H3 native resolution grid (32-aligned, ~0.5 MP).
+   * Baseline: 960x544 (16:9 = 522k px). Redused from 1216x704 (0.86 MP) due to 32GB VRAM limit.
+   * All ratios aligned to ~0.5 MP to keep within 32GB on RTX 5090D.
+   */
   private resolveResolution(ratio: string): { width: number; height: number } {
     switch (ratio) {
-      case '16:9': return { width: 1216, height: 704 }
-      case '9:16': return { width: 768, height: 1376 }
-      case '1:1':  return { width: 768, height: 768 }
-      case '4:3':  return { width: 1024, height: 768 }
+      case '16:9': return { width: 960, height: 544 }
+      case '9:16': return { width: 544, height: 960 }
+      case '1:1':  return { width: 704, height: 704 }
+      case '4:3':  return { width: 832, height: 608 }
       default: {
         const parts = ratio.split(':').map(Number)
         if (parts.length === 2 && parts[0] > 0 && parts[1] > 0) {
-          const base = 768
+          const base = 544
           return {
-            width: Math.round(base * parts[0] / Math.max(parts[0], parts[1])),
-            height: Math.round(base * parts[1] / Math.max(parts[0], parts[1])),
+            width: Math.round(base * parts[0] / Math.max(parts[0], parts[1])) & ~31,
+            height: Math.round(base * parts[1] / Math.max(parts[0], parts[1])) & ~31,
           }
         }
-        return { width: 1376, height: 768 }
+        return { width: 960, height: 544 }
       }
     }
   }

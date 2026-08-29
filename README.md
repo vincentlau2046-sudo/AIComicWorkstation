@@ -92,8 +92,8 @@
 ┌─────▼──────┐  ┌───────▼──────────┐  ┌────▼──────────┐
 │ IFF Proxy  │  │  Pipeline Engine │  │  Pipeline Eng │
 │ :8999      │  │  (DAG executor)  │  │  (video path) │
-│ deepseek   │  │  ┌──────────────┐│  │               │
-│ qwen3-vl   │  │  │ ComfyUI      ││  │  ComfyUI      │
+│ gemma4     │  │  ┌──────────────┐│  │               │
+│ deepseek   │  │  │ ComfyUI      ││  │  ComfyUI      │
 └────────────┘  │  │ 7 atomic     ││  │  H3-i2v/r2v  │
                 │  │ workflows    ││  └──────┬────────┘
                 │  └──────────────┘│         │
@@ -109,12 +109,13 @@
 
 | 调用 | 路由 | 模型 |
 |------|------|------|
-| `generateText()` 纯文本 | IFF Proxy :8999 | deepseek-v4-flash |
-| `generateText()` 带图片 | IFF Proxy :8999 | qwen3-vl-4b |
+| `generateText()` 纯文本 | IFF Proxy :8999 | 跟随模型选择器 |
+| `generateText()` 带图片（VL） | IFF Proxy :8999 | 跟随模型选择器（图片自动压缩为 JPEG@85%/2048px） |
 | `generateImage()` | ComfyUI :8188 | Qwen T2I / Edit / MultiAngle |
 | `generateVideo()` | ComfyUI :8188 | H3 i2v / r2v / t2v |
 
 全部 LLM 请求统一从 IFF Proxy 出入，本地 vLLM 和云端 API 由 IFF 根据 model 名路由。
+VL 调用前自动压缩图片：resize 到最长边 2048px，转 JPEG 85% 质量。原始 5MB PNG → ~500KB，多图场景下确保请求体不超过 IFF 10MB 限制。
 
 ### ComfyUI 工作流
 
@@ -148,8 +149,8 @@
 | 前端 | React 19, Tailwind CSS 4, Zustand |
 | 数据库 | SQLite + Drizzle ORM |
 | 图像/视频 | **ComfyUI** (本地) :8188 |
-| 文本 LLM | **IFF Proxy** :8999 → deepseek-v4-flash |
-| VL 视觉 | **IFF Proxy** :8999 → qwen3-vl-4b (vLLM :8002) |
+| 文本 LLM | **IFF Proxy** :8999 → 模型选择器配置 |
+| VL 视觉 | **IFF Proxy** :8999 → 模型选择器配置（图片自动压缩） |
 | 视频处理 | FFmpeg (fluent-ffmpeg) |
 | 包管理 | pnpm / npm |
 
@@ -160,7 +161,6 @@
 - Node.js 18+
 - **ComfyUI**（localhost:8188）— 详见下方配置
 - **IFF Proxy**（localhost:8999）— 文本/VL 统一网关
-- **vLLM**（localhost:8002，可选）— qwen3-vl-4b 本地 VL
 - FFmpeg
 
 ### 安装
@@ -186,8 +186,7 @@ COMFYUI_PIPELINES_DIR=./src/lib/pipeline-engine/pipelines
 # IFF Proxy（文本+VL 统一网关）
 OPENAI_BASE_URL=http://localhost:8999/v1
 OPENAI_API_KEY=***
-OPENAI_MODEL=deepseek-v4-flash
-OPENAI_VL_MODEL=qwen3-vl-4b
+OPENAI_MODEL=gemma4-31b-vl
 ```
 
 ### 启动
@@ -247,7 +246,21 @@ src/
 
 | 版本 | 内容 |
 |------|------|
-| v0.0.1 | 初始版本 · ComfyUI 原子工作流 + Pipeline Engine + CompositeAIProvider + git remote |
+| v0.0.6 | H3 Motion Adapter LoRA + 720P upscale；environmentPrompts/characters/timeOfDay/timeline 完整写入 |
+| v0.0.5 | R2V/FL2V 对齐 MiniMax H3 官方 shot-series 格式；角色参考图 guard ⑧ |
+| v0.0.4 | R2V prompt-template 对齐 Ref2VA 6-section 格式 |
+| v0.0.3 | FL2V 时间链 + 动作节拍引擎 + 中英双语路由 |
+| v0.0.2 | 角色四视图 Pipeline；Phase Image 生成；Scope 三分类；Prompt 双语系统 |
+| v0.0.1 | 初始版本 · ComfyUI 原子工作流 + Pipeline Engine + CompositeAIProvider |
+
+### 近期修复（2026-08-28）
+
+| 提交 | 说明 |
+|------|------|
+| `e22922a` | VL 图片发送前自动压缩为 JPEG@85%/2048px，解决 IFF 10MB 请求体限制 |
+| `1d92293` | 移除 composite-provider 硬编码 VL_MODEL（qwen3-vl-4b）覆写，VL 调用跟随模型选择器 |
+| `84242fb` | 修复 scene_frame_generate 单次 regenerate 时跳过已完成 asset 导致不生图的问题 |
+| `aaccc42` | 修复 handleShotSplitStream 两个插入点遗漏 environmentPrompts/characters/timeOfDay/timeline |
 
 ## License
 

@@ -73,3 +73,47 @@ ComfyUI/models/loras/minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors 
 - `/tmp/h3-r2v.json.bak` — pre-modification original
 - `/home/vince/ComfyUI/workflows/AIComicWorkstation/atomic/h3-i2v.json.bak` — production directory backup
 - `/home/vince/ComfyUI/workflows/AIComicWorkstation/atomic/h3-r2v.json.bak` — production directory backup
+
+## Restoration (2026-08-28) — OOM fix
+
+### Context
+
+The Motion Adapter + Turbo LoRA additions (Aug 27) pushed H3 VRAM over 32GB on RTX 5090D.
+Turbo LoRA (`minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors`, 978M params BF16 model diff)
+requires ~48-50GB peak VRAM per inference, incompatible with 32GB 5090D.
+
+### Changes
+
+1. **Workflows restored to baseline** (git `3aedb1e`, 0 LoRA nodes):
+   - `h3-i2v.json` — removed LoraLoaderModelOnly (node 23)
+   - `h3-r2v.json` — removed both LoraLoaderModelOnly nodes (nodes 22, 23)
+
+2. **ComfyUI startup**: removed `--cache-none` flag
+   - Default RAM-pressure caching skips 32B text encoder on re-runs, lowering VRAM peak
+   - See: kingy.ai H3 guide, ComfyUI-H3-YT-guide
+
+### Current running state
+
+- Workflow: baseline (no LoRA)
+- ComfyUI flags: `--listen 0.0.0.0 --port 8188 --enable-manager`
+- Backup of pre-restoration workflows: `.current_bak` files in production directory
+
+### To restore Turbo LoRA workflow (when/if needed)
+
+```bash
+cp /home/vince/ComfyUI/workflows/AIComicWorkstation/atomic/h3-i2v.json.current_bak \
+   /home/vince/ComfyUI/workflows/AIComicWorkstation/atomic/h3-i2v.json
+cp /home/vince/ComfyUI/workflows/AIComicWorkstation/atomic/h3-r2v.json.current_bak \
+   /home/vince/ComfyUI/workflows/AIComicWorkstation/atomic/h3-r2v.json
+# Re-add --cache-none to start_with_mirror.sh
+# Restart ComfyUI
+```
+
+### LoRA files (kept for future use)
+
+```
+ComfyUI/models/loras/minimax_h3/minimax_h3_motion_adapter_pilot_r16.safetensors
+ComfyUI/models/loras/minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors
+ComfyUI/models/loras/minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors
+ComfyUI/models/loras/minimax_h3_turbo_v4_step600_ema_pruned_comfyui.safetensors
+```
