@@ -5070,10 +5070,17 @@ async function handleOptimizeVideoPrompts(
 
   // 4. 调用 LLM
   const provider = resolveAIProvider(modelConfig);
-  const raw = await provider.generateText(user, {
-    systemPrompt: system,
-    temperature: 0.4,
-  });
+  let raw: string;
+  try {
+    raw = await provider.generateText(user, {
+      systemPrompt: system,
+      temperature: 0.4,
+    });
+  } catch (err) {
+    return NextResponse.json({
+      error: `LLM调用失败: ${err instanceof Error ? err.message : "未知错误"}`,
+    }, { status: 500 });
+  }
 
   // 5. 解析 JSON
   let parsed: OptimizeResult;
