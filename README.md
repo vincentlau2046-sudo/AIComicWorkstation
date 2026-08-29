@@ -92,8 +92,8 @@
 ┌─────▼──────┐  ┌───────▼──────────┐  ┌────▼──────────┐
 │ IFF Proxy  │  │  Pipeline Engine │  │  Pipeline Eng │
 │ :8999      │  │  (DAG executor)  │  │  (video path) │
-│ gemma4     │  │  ┌──────────────┐│  │               │
-│ deepseek   │  │  │ ComfyUI      ││  │  ComfyUI      │
+│ local VLM  │  │  ┌──────────────┐│  │               │
+│ cloud LLM  │  │  │ ComfyUI      ││  │  ComfyUI      │
 └────────────┘  │  │ 7 atomic     ││  │  H3-i2v/r2v  │
                 │  │ workflows    ││  └──────┬────────┘
                 │  └──────────────┘│         │
@@ -109,12 +109,12 @@
 
 | 调用 | 路由 | 模型 |
 |------|------|------|
-| `generateText()` 纯文本 | IFF Proxy :8999 | 跟随模型选择器 |
-| `generateText()` 带图片（VL） | IFF Proxy :8999 | 跟随模型选择器（图片自动压缩为 JPEG@85%/2048px） |
+| `generateText()` 纯文本 | IFF Proxy :8999 | 跟随模型选择器（本地 vLLM 全为 VLM：qwen3-vl-4b / gemma4-31b-vl / muse；云端当前列表为 LLM） |
+| `generateText()` 带图片 | IFF Proxy :8999 | 跟随模型选择器（需 VLM；图片自动压缩为 JPEG@85%/2048px） |
 | `generateImage()` | ComfyUI :8188 | Qwen T2I / Edit / MultiAngle |
 | `generateVideo()` | ComfyUI :8188 | H3 i2v / r2v / t2v |
 
-全部 LLM 请求统一从 IFF Proxy 出入，本地 vLLM 和云端 API 由 IFF 根据 model 名路由。
+全部文本/VL 请求统一从 IFF Proxy 出入：本地 vLLM 提供的模型全为 VLM（qwen3-vl-4b / gemma4-31b-vl / muse 等）；云端 provider 当前列表为 LLM；IFF 根据 model 名路由到对应后端。
 VL 调用前自动压缩图片：resize 到最长边 2048px，转 JPEG 85% 质量。原始 5MB PNG → ~500KB，多图场景下确保请求体不超过 IFF 10MB 限制。
 
 ### ComfyUI 工作流
@@ -149,8 +149,7 @@ VL 调用前自动压缩图片：resize 到最长边 2048px，转 JPEG 85% 质�
 | 前端 | React 19, Tailwind CSS 4, Zustand |
 | 数据库 | SQLite + Drizzle ORM |
 | 图像/视频 | **ComfyUI** (本地) :8188 |
-| 文本 LLM | **IFF Proxy** :8999 → 模型选择器配置 |
-| VL 视觉 | **IFF Proxy** :8999 → 模型选择器配置（图片自动压缩） |
+| 语言模型 | **IFF Proxy** :8999 → 模型选择器配置（本地 vLLM 全为 VLM：qwen3-vl-4b / gemma4-31b-vl / muse；云端 provider 当前列表为 LLM；带图调用前图片自动压缩 JPEG@85%/2048px） |
 | 视频处理 | FFmpeg (fluent-ffmpeg) |
 | 包管理 | pnpm / npm |
 
@@ -160,7 +159,7 @@ VL 调用前自动压缩图片：resize 到最长边 2048px，转 JPEG 85% 质�
 
 - Node.js 18+
 - **ComfyUI**（localhost:8188）— 详见下方配置
-- **IFF Proxy**（localhost:8999）— 文本/VL 统一网关
+- **IFF Proxy**（localhost:8999）— 语言模型统一网关（本地：全为 VLM；云端：当前列表为 LLM）
 - FFmpeg
 
 ### 安装
@@ -183,7 +182,7 @@ COMFYUI_BASE_URL=http://localhost:8188
 COMFYUI_WORKFLOWS_DIR=/path/to/ComfyUI/workflows/AIComicWorkstation/atomic
 COMFYUI_PIPELINES_DIR=./src/lib/pipeline-engine/pipelines
 
-# IFF Proxy（文本+VL 统一网关）
+# IFF Proxy（语言模型统一网关：本地 VLM / 云端 LLM）
 OPENAI_BASE_URL=http://localhost:8999/v1
 OPENAI_API_KEY=***
 OPENAI_MODEL=gemma4-31b-vl
