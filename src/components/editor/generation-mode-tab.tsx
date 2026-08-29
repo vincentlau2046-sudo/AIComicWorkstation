@@ -14,7 +14,7 @@ export function GenerationModeTab() {
 
   if (!project) return null;
 
-  const mode = (project.generationMode || "keyframe") as GenerationMode;
+  const mode = (project.generationMode || "reference") as GenerationMode;
 
   async function switchMode(newMode: GenerationMode) {
     if (!project || newMode === mode) return;

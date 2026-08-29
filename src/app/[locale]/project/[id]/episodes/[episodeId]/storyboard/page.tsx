@@ -147,7 +147,7 @@ export default function EpisodeStoryboardPage() {
 
   const totalShots = project.shots.length;
   const shotsWithFrames = project.shots.filter((s) => hasKeyframePair(s)).length;
-  const generationMode = (project.generationMode || "keyframe") as "keyframe" | "reference";
+  const generationMode = (project.generationMode || "reference") as "keyframe" | "reference";
   const shotsWithVideo = project.shots.filter((s) =>
     generationMode === "reference" ? getReferenceVideoUrl(s) : getKeyframeVideoUrl(s)
   ).length;
