@@ -1,0 +1,56 @@
+id: video-generate
+display_name: "视频生成管线"
+description: "H3 prompt 构建 → MiniMax H3 I2V 视频生成 → 质检"
+version: "2.0"
+
+steps:
+  - id: gen_h3_prompt
+    type: script
+    script: h3_prompt_builder.py
+    description: "读取所有 DB 上下文，构建 H3 格式 prompt（v0.2.0）"
+    inputs:
+      shotId: ${params.shotId}
+      generationMode: ${params.generationMode}
+      videoScript: ${params.videoScript}
+      motionScript: ${params.motionScript}
+      cameraDirection: ${params.cameraDirection}
+      duration: ${params.duration}
+      firstFrameUrl: ${params.firstFrame}
+      lastFrameUrl: ${params.lastFrame}
+      soundDesign: ${params.soundDesign}
+      musicCue: ${params.musicCue}
+      dialoguesJson: ${params.dialoguesJson}
+      charactersJson: ${params.charactersJson}
+      sceneDesc: ${params.sceneDesc}
+      sceneLighting: ${params.sceneLighting}
+      bgmUrl: ${params.bgmUrl}
+      languageMode: ${params.languageMode}
+    outputs:
+      promptText: ${outputs[0].promptText}
+
+  - id: gen_video
+    type: atomic_workflow
+    workflow_id: h3-i2v
+    description: "首尾帧 → H3 prompt → MP4（含音频）"
+    depends_on: [gen_h3_prompt]
+    inputs:
+      prompt: ${steps.gen_h3_prompt.outputs[0]}
+      first_frame: ${params.first_frame}
+      last_frame: ${params.last_frame}
+      seed: ${params.seed}
+      steps: 20
+      cfg: 7.0
+      width: 960
+      height: 544
+      length: 73
+      fps: 24
+    outputs:
+      video: ${outputs[0].localPath}
+    retry:
+      max: 2
+      delay: 2000
+
+outputs:
+  primary: ${steps.gen_video.outputs[0]}
+  intermediates:
+    video_path: ${steps.gen_video.outputs[0]}

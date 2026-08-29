@@ -1,0 +1,150 @@
+/**
+ * 正面视图 prompt 模板 — 命名字段，集中定义。
+ * 调整任一字段自动影响所有调用方（pipeline / single / batch）。
+ */
+const FRONT_VIEW_TEMPLATE = {
+  subject_tag:     `[character design illustration] [front view] [full body] [standing pose]`,
+  composition:     `[composition: vertical portrait, full body from crown to soles, head near top, feet near bottom]`,
+  pose_constraint: `[pose: neutral standing, arms at sides, feet shoulder-width apart, neutral expression]`,
+  environment:     `[environment: pure white background, no shadow]`,
+  quality_tag:     `[quality: sharp focus, high detail, clean character portrait]`,
+  anti_text_tag:   `[no text] [no labels] [no annotations] [no lettering] [no watermarks]`,
+} as const;
+
+
+/**
+ * 构建 ComfyUI gen_front 步骤用的正面图 T2I prompt（恢复 AICF 基线）。
+ * t2iStructure 优先（结构化标签 → Qwen 2512 精度 +30%），
+ * description 作为 fallback + 细节补充。
+ * 标签固定英文（[age]/[subject] 等是 Qwen 训练集高频结构），字段值由 t2iStructure JSON 提供。
+ */
+export function buildCharacterFrontViewPrompt(
+  t2iStructure: string | null,
+  description: string
+): string {
+  // 恢复 AICF：英文模板 + 英文标签
+  const tpl = FRONT_VIEW_TEMPLATE;
+  const L = {
+    age:      "[age]",
+    subject:   "[subject]",
+    body:      "[body]",
+    face:      "[face]",
+    hair:      "[hair]",
+    clothing:  "[clothing]",
+    lighting:   "[lighting]",
+    colorOpen: "[color palette:",
+  };
+
+  if (t2iStructure) {
+    // 主路径：结构化标签前置，散文兜底
+    try {
+      const s = JSON.parse(t2iStructure) as Record<string, string>;
+      const colorTag = description.match(/色彩调色板[：:]\s*(.+?)(?:[。\n]|$)/);
+      return [
+        tpl.subject_tag,
+        "",
+        tpl.composition,
+        "",
+        tpl.pose_constraint,
+        "",
+        tpl.environment,
+        "",
+        s.era ? `[era: ${s.era}]` : "",
+        s.style ? `[style: ${s.style}]` : "",
+        "",
+        s.age ? `${L.age} ${s.age}` : "",
+        s.subject ? `${L.subject} ${s.subject}` : "",
+        s.body ? `${L.body} ${s.body}` : "",
+        s.face ? `${L.face} ${s.face}` : "",
+        s.hair ? `${L.hair} ${s.hair}` : "",
+        s.clothing ? `${L.clothing} ${s.clothing}` : "",
+        s.lighting ? `${L.lighting} ${s.lighting}` : "",
+        "",
+        description,
+        "",
+        colorTag ? `${L.colorOpen} ${colorTag[1]}]` : "",
+        "",
+        tpl.quality_tag,
+        tpl.anti_text_tag,
+      ].filter(Boolean).join("\n");
+    } catch {
+      // JSON parse failed — fall through to prose path
+      console.warn("[buildCharacterFrontViewPrompt] t2iStructure parse failed, using prose fallback");
+    }
+  }
+  // Fallback: 散文路径（已有角色或 t2iStructure 解析失败）
+  return [
+    tpl.subject_tag,
+    "",
+    tpl.composition,
+    "",
+    tpl.pose_constraint,
+    "",
+    tpl.environment,
+    "",
+    description,
+    "",
+    tpl.quality_tag,
+    tpl.anti_text_tag,
+  ].join("\n");
+}
+
+/**
+ * API 路径四视图 prompt（英文模板，供 Gemini 等多模态模型一次性生成四视图）。
+ * ComfyUI 路径不使用此函数（四视图由 pipeline 多步骤负责）。
+ */
+export function buildCharacterTurnaroundPrompt(description: string, characterName?: string): string {
+  return `Character four-view reference sheet — professional character design document.
+
+=== CRITICAL: ART STYLE FIDELITY ===
+The CHARACTER DESCRIPTION below is authoritative. It may specify an art style explicitly, implicitly, or through a combination of modifiers (e.g. "3D 国漫 CG 渲染", "水墨写意", "赛博朋克像素画", "cel-shaded anime", "oil painting portrait", "PBR realtime render").
+
+Rules for interpreting style:
+1. Treat the FULL style phrase as one atomic instruction. Do NOT cherry-pick individual words and map them to a default bucket. "3D 写实国漫渲染" is NOT the same as "photorealistic" — it is a stylized 3D CG render in the Chinese animation idiom.
+2. Style modifiers like "写实 / realistic / 高清 / 精致" describe RENDERING FIDELITY, not medium. They raise detail level within the chosen medium; they never convert the medium to live-action photography.
+3. The medium (2D illustration / 3D CG / photograph / painting / pixel / etc.) is determined ONLY by explicit medium words such as "照片 / photograph / live-action / 真人实拍 / 摄影". In the ABSENCE of such explicit photographic words, DO NOT output a photograph or live-action render, even if "写实" or "realistic" appears.
+4. When multiple style words are present, the most specific / most restrictive one wins. "国漫" + "3D" + "写实" → stylized 3D CG in Chinese animation style with high rendering fidelity.
+5. Color palette, lighting mood, and era references in the description (e.g. "低饱和度暗沉色调", "电影级历史正剧质感") are MANDATORY and must be honored exactly — they are not decorative.
+6. If no style is mentioned at all, infer the most appropriate stylized illustration from the character's setting and genre. Default to stylized illustration, NOT photography.
+
+=== CHARACTER DESCRIPTION (authoritative) ===
+${characterName ? `Name: ${characterName}\n` : ''}${description}
+
+=== FACE — HIGH DETAIL ===
+Render the face with precision appropriate to the chosen medium and style:
+- Consistent facial bone structure, eye shape, nose, mouth — matching the description exactly
+- Eyes expressive and detailed, rendered in the chosen medium's idiom
+- Hair with defined volume, color and flow, rendered in the chosen medium's idiom
+- Skin and surface shading rendered in the chosen medium's idiom (cel-shading, subsurface, PBR, painterly, etc.)
+- The face must be striking, memorable, and instantly recognizable across all four views
+
+=== WEAPONS, COSTUME & EQUIPMENT ===
+- All props, armor, clothing and equipment must be rendered in the SAME medium and style as the character
+- Material detail must match the style (painterly strokes for paintings, PBR materials for 3D CG, clean flats for anime, etc.)
+- Scale and anatomy must be correct relative to the body
+
+=== FOUR-VIEW LAYOUT ===
+Four views arranged LEFT to RIGHT on a clean pure white canvas, consistent medium shot (waist to crown) across all four:
+1. FRONT — facing viewer directly, showing full outfit and any held items
+2. THREE-QUARTER — rotated ~45° right, showing face depth and dimensional form
+3. SIDE PROFILE — perfect 90° facing right, clear silhouette
+4. BACK — fully facing away, hairstyle and clothing back detail
+
+=== LIGHTING & RENDERING ===
+- Clean professional key/fill/rim lighting, consistent direction across all four views
+- Pure white background for clean character separation
+- Honor any mood/tone/palette constraints from the description (if it says "低饱和度暗沉", the output MUST be low-saturation and muted, NOT bright)
+- Highest quality achievable WITHIN the chosen medium and style — never break medium to chase fidelity
+
+=== CONSISTENCY ACROSS ALL FOUR VIEWS ===
+- Identical character identity, proportions and colors in every view
+- Identical outfit, accessories, weapon placement, hair
+- Heads aligned at the same top edge, waist at the same bottom edge
+- Consistent expression across all views
+
+=== CHARACTER NAME LABEL ===
+${characterName ? `Display the character's name "${characterName}" as a clean typographic label below the four-view layout. Use a modern sans-serif font, dark text on white background, centered alignment.` : 'No character name label required.'}
+
+=== FINAL OUTPUT STANDARD ===
+Professional character design reference sheet. This is the single canonical reference — all future generated frames MUST reproduce this exact character in this exact medium and style. Zero medium drift, zero style drift, zero AI artifacts.`;
+}

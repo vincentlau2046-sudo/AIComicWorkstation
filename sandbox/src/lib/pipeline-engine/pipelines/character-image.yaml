@@ -1,0 +1,99 @@
+id: character-image
+display_name: "角色图生成管线"
+description: "正面角色图 → 四角度合成 → 四视图"
+version: "1.0"
+
+steps:
+  - id: gen_front
+    type: atomic_workflow
+    workflow_id: qwen-2512-t2i
+    description: "根据角色描述生成正面形象"
+    inputs:
+      prompt: ${params.character_prompt}
+      seed: ${params.seed}
+      width: 640
+      height: 1440
+      steps: 8
+      cfg: 1.0
+    outputs:
+      front_image: ${outputs[0].localPath}
+    retry:
+      max: 2
+      delay: 2000
+
+  - id: gen_angle_left
+    type: atomic_workflow
+    workflow_id: qwen-2511-edit-multiangle
+    description: "左45度视图"
+    depends_on: [gen_front]
+    inputs:
+      source_image: ${steps.gen_front.outputs[0]}
+      prompt: "<sks> front-left quarter view eye-level shot medium shot"
+      seed: ${params.seed + 1}
+      steps: 4
+      angle_strength: 1.0
+      lightning_strength: 0.8
+    outputs:
+      angle_image: ${outputs[0].localPath}
+    retry:
+      max: 1
+      delay: 2000
+
+  - id: gen_angle_side
+    type: atomic_workflow
+    workflow_id: qwen-2511-edit-multiangle
+    description: "正侧面图"
+    depends_on: [gen_front]
+    inputs:
+      source_image: ${steps.gen_front.outputs[0]}
+      prompt: "<sks> right side view eye-level shot medium shot"
+      seed: ${params.seed + 2}
+      steps: 4
+      angle_strength: 1.0
+      lightning_strength: 0.8
+    outputs:
+      angle_image: ${outputs[0].localPath}
+    retry:
+      max: 1
+      delay: 2000
+
+  - id: gen_angle_back
+    type: atomic_workflow
+    workflow_id: qwen-2511-edit-multiangle
+    description: "背面视图"
+    depends_on: [gen_front]
+    inputs:
+      source_image: ${steps.gen_front.outputs[0]}
+      prompt: "<sks> back view eye-level shot medium shot"
+      seed: ${params.seed + 3}
+      steps: 4
+      angle_strength: 1.0
+      lightning_strength: 0.8
+    outputs:
+      angle_image: ${outputs[0].localPath}
+    retry:
+      max: 1
+      delay: 2000
+
+  - id: merge_fourview
+    type: script
+    script: merge_fourview.py
+    description: "将四张角度图拼合为四视图"
+    depends_on:
+      - gen_front
+      - gen_angle_left
+      - gen_angle_side
+      - gen_angle_back
+    inputs:
+      front: ${steps.gen_front.outputs[0]}
+      left: ${steps.gen_angle_left.outputs[0]}
+      side: ${steps.gen_angle_side.outputs[0]}
+      back: ${steps.gen_angle_back.outputs[0]}
+      character_name: ${params.character_name}
+    outputs:
+      merged: ${outputs[0].localPath}
+
+outputs:
+  primary: ${steps.merge_fourview.outputs[0]}
+  intermediates:
+    front: ${steps.gen_front.outputs[0]}
