@@ -1105,7 +1105,7 @@ export default function EpisodeStoryboardPage() {
             <Button
               onClick={handleOptimizeVideoPrompts}
               disabled={anyGenerating || shotsWithVideoPrompts !== totalShots}
-              variant="outline"
+              variant="default"
               size="sm"
             >
               {generatingOptimize
