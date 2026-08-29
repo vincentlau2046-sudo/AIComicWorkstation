@@ -34,7 +34,6 @@ import {
   List,
   ChevronDown,
   GitCompare,
-  WandSparkles,
 } from "lucide-react";
 import { InlineModelPicker } from "@/components/editor/model-selector";
 import { VideoRatioPicker } from "@/components/editor/video-ratio-picker";
@@ -1111,7 +1110,7 @@ export default function EpisodeStoryboardPage() {
             >
               {generatingOptimize
                 ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                : <WandSparkles className="h-3.5 w-3.5" />}
+                : <Sparkles className="h-3.5 w-3.5" />}
               {generatingOptimize ? "优化中..." : t("project.batchOptimizeVideoPrompts")}
             </Button>
           </div>
