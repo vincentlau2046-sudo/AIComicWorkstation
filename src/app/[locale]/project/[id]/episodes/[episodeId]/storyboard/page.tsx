@@ -34,6 +34,7 @@ import {
   List,
   ChevronDown,
   GitCompare,
+  WandSparkles,
 } from "lucide-react";
 import { InlineModelPicker } from "@/components/editor/model-selector";
 import { VideoRatioPicker } from "@/components/editor/video-ratio-picker";
@@ -79,6 +80,14 @@ export default function EpisodeStoryboardPage() {
   const [lastBatchAction, setLastBatchAction] = useState<string | null>(null);
   const [compareMode, setCompareMode] = useState(false);
   const [generatingRefPrompts, setGeneratingRefPrompts] = useState(false);
+  const [generatingOptimize, setGeneratingOptimize] = useState(false);
+  const [optimizeReport, setOptimizeReport] = useState<{
+    domain_analysis: { music_arc: string; visual_continuity: string; audio_transition: string; pacing: string };
+    self_check: Record<string, string>;
+    optimized: number; total: number;
+    not_found?: number[];
+  } | null>(null);
+  const [showOptimizeReport, setShowOptimizeReport] = useState(false);
 
   const currentEpisodeId = useProjectStore((s) => s.currentEpisodeId);
   const episodeStoreEpisodes = useEpisodeStore((s) => s.episodes);
@@ -213,7 +222,7 @@ export default function EpisodeStoryboardPage() {
     }).length;
   }, [project?.shots]);
 
-  const anyGenerating = generating || generatingFrames || generatingVideos || generatingSceneFrames || generatingRefImages || generatingVideoPrompts || generatingRefPrompts;
+  const anyGenerating = generating || generatingFrames || generatingVideos || generatingSceneFrames || generatingRefImages || generatingVideoPrompts || generatingRefPrompts || generatingOptimize;
 
   const drawerShots = project.shots;
 
@@ -585,6 +594,35 @@ export default function EpisodeStoryboardPage() {
     await fetchProject(project.id, useProjectStore.getState().currentEpisodeId!);
     setBatchProgress(null);
   }
+  async function handleOptimizeVideoPrompts() {
+    if (!project) return;
+    setGeneratingOptimize(true);
+    try {
+      const response = await apiFetch(`/api/projects/${project.id}/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "optimize_video_prompts",
+          modelConfig: getModelConfig(),
+          episodeId: useProjectStore.getState().currentEpisodeId,
+        }),
+      });
+      const data = await response.json();
+      if (data.error) throw new Error(data.error);
+      setOptimizeReport(data);
+      setShowOptimizeReport(true);
+      if (data.not_found?.length) {
+        toast.warning(`优化完成，但 ${data.not_found.length} 个镜头未在响应中找到`);
+      } else {
+        toast.success(`已优化 ${data.optimized}/${data.total} 个镜头`);
+      }
+      await fetchProject(project.id, useProjectStore.getState().currentEpisodeId!);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "优化失败");
+    } finally {
+      setGeneratingOptimize(false);
+    }
+  }
 
   async function handleBatchGenerateReferenceVideos(overwrite = false) {
     if (!project) return;
@@ -731,6 +769,7 @@ export default function EpisodeStoryboardPage() {
   }
 
   return (
+    <>
     <div className="animate-page-in space-y-4">
       {/* Page header */}
       <div className="flex items-center justify-between">
@@ -1064,6 +1103,17 @@ export default function EpisodeStoryboardPage() {
               )}
               {generatingVideoPrompts ? t("common.generating") : t("project.batchGenerateVideoPrompts")}
             </Button>
+            <Button
+              onClick={handleOptimizeVideoPrompts}
+              disabled={anyGenerating || shotsWithVideoPrompts !== totalShots}
+              variant="outline"
+              size="sm"
+            >
+              {generatingOptimize
+                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                : <WandSparkles className="h-3.5 w-3.5" />}
+              {generatingOptimize ? "优化中..." : t("project.batchOptimizeVideoPrompts")}
+            </Button>
           </div>
 
           {/* Row 4: Videos */}
@@ -1305,5 +1355,57 @@ export default function EpisodeStoryboardPage() {
         />
       )}
     </div>
+      {showOptimizeReport && optimizeReport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowOptimizeReport(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[85vh] overflow-y-auto mx-4" onClick={e => e.stopPropagation()}>
+            <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between rounded-t-2xl">
+              <div>
+                <h2 className="text-lg font-bold">优化分析报告</h2>
+                <p className="text-sm text-[--text-muted]">已优化 {optimizeReport.optimized}/{optimizeReport.total} 个镜头</p>
+              </div>
+              <button onClick={() => setShowOptimizeReport(false)} className="text-[--text-muted] hover:text-[--text-primary] text-lg">✕</button>
+            </div>
+            <div className="px-6 py-4 space-y-6 text-sm">
+              <section>
+                <h3 className="font-bold text-amber-600 text-base mb-2">🎵 配乐弧线</h3>
+                <p className="text-[--text-secondary] leading-relaxed whitespace-pre-line">{optimizeReport.domain_analysis.music_arc}</p>
+              </section>
+              <section>
+                <h3 className="font-bold text-blue-600 text-base mb-2">🎨 视觉连贯性</h3>
+                <p className="text-[--text-secondary] leading-relaxed whitespace-pre-line">{optimizeReport.domain_analysis.visual_continuity}</p>
+              </section>
+              <section>
+                <h3 className="font-bold text-green-600 text-base mb-2">🔊 音频过渡</h3>
+                <p className="text-[--text-secondary] leading-relaxed whitespace-pre-line">{optimizeReport.domain_analysis.audio_transition}</p>
+              </section>
+              <section>
+                <h3 className="font-bold text-purple-600 text-base mb-2">📊 全局节奏</h3>
+                <p className="text-[--text-secondary] leading-relaxed whitespace-pre-line">{optimizeReport.domain_analysis.pacing}</p>
+              </section>
+              <section>
+                <h3 className="font-bold text-red-600 text-base mb-2">🔍 自检</h3>
+                <div className="space-y-2">
+                  {Object.entries(optimizeReport.self_check).map(([key, value]) => (
+                    <div key={key} className="bg-muted rounded-lg p-3">
+                      <div className="font-mono text-xs text-[--text-muted] mb-1">{key}</div>
+                      <div className="text-xs whitespace-pre-line">{value}</div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+              {optimizeReport.not_found && optimizeReport.not_found.length > 0 && (
+                <section className="rounded-md bg-amber-50 border border-amber-200 p-3">
+                  <h3 className="font-bold text-amber-700 text-sm">⚠️ 未在响应中找到的镜头</h3>
+                  <p className="text-amber-600 text-xs mt-1">Shot {optimizeReport.not_found!.join(", ")} — 已跳过，原提示词保留</p>
+                </section>
+              )}
+            </div>
+            <div className="border-t px-6 py-3 flex justify-end">
+              <Button variant="outline" size="sm" onClick={() => setShowOptimizeReport(false)}>关闭</Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

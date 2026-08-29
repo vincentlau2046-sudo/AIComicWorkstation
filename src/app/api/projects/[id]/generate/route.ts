@@ -241,6 +241,10 @@ export async function POST(
     return handleBatchVideoGenerate(projectId, userId, payload, modelConfig, episodeId);
   }
 
+  if (action === "optimize_video_prompts") {
+    return handleOptimizeVideoPrompts(projectId, userId, payload, modelConfig, episodeId);
+  }
+
   if (action === "single_ref_video_prompt") {
     return enqueueSingleTask(projectId, payload, modelConfig, "ref_video_prompt_generate");
   }
@@ -4943,3 +4947,172 @@ async function handleGenerateKeyframePrompts(
   console.log(`[GenerateKeyframePrompts] Updated ${updatedCount}/${allShots.length} shots (sequential)`);
   return NextResponse.json({ updatedCount, totalShots: allShots.length });
 }
+
+// ─── Optimize Video Prompts ────────────────────────────────────────────
+
+interface OptimizeResult {
+  domain_analysis: {
+    music_arc: string;
+    visual_continuity: string;
+    audio_transition: string;
+    pacing: string;
+  };
+  self_check: {
+    principle_1_2_l_cut: string;
+    principle_1_3_silence: string;
+    principle_2_1_lighting: string;
+    principle_3_1_audio_bridge: string;
+    principle_4_2_climax_chain: string;
+  };
+  shots: Array<{
+    sequence: number;
+    role: string;
+    video_prompt: string;
+    changes: string[];
+  }>;
+}
+
+async function handleOptimizeVideoPrompts(
+  projectId: string,
+  userId: string,
+  payload?: Record<string, unknown>,
+  modelConfig?: ModelConfig,
+  episodeId?: string
+) {
+  const epId = episodeId || payload?.episodeId as string;
+  if (!epId) return NextResponse.json({ error: "episodeId required" }, { status: 400 });
+
+  // 1. 收集全部 shot（需要有 video_prompt）
+  const allShots = await db.select({
+    id: shots.id,
+    sequence: shots.sequence,
+    prompt: shots.prompt,
+    motionScript: shots.motionScript,
+    duration: shots.duration,
+    transitionIn: shots.transitionIn,
+    transitionOut: shots.transitionOut,
+    timeOfDay: shots.timeOfDay,
+    videoPrompt: shots.videoPrompt,
+  }).from(shots)
+    .where(and(eq(shots.projectId, projectId), eq(shots.episodeId, epId)))
+    .orderBy(asc(shots.sequence));
+
+  const missingPrompts = allShots.filter(s => !s.videoPrompt);
+  if (missingPrompts.length > 0) {
+    return NextResponse.json({
+      error: `${missingPrompts.length} 个镜头缺少视频提示词，请先生成`,
+      missingSequences: missingPrompts.map(s => s.sequence),
+    }, { status: 400 });
+  }
+
+  // 2. 收集剧集上下文
+  const [ep] = await db.select({
+    title: episodes.title,
+    visualStyle: episodes.visualStyle,
+    eraAesthetic: episodes.eraAesthetic,
+    moodDirection: episodes.moodDirection,
+    colorPalette: episodes.colorPalette,
+  }).from(episodes).where(eq(episodes.id, epId)).limit(1);
+
+  const [proj] = await db.select({
+    title: projects.title,
+    visualStyle: projects.visualStyle,
+    eraAesthetic: projects.eraAesthetic,
+    moodDirection: projects.moodDirection,
+    colorPalette: projects.colorPalette,
+  }).from(projects).where(eq(projects.id, projectId)).limit(1);
+
+  const chars = await getEpisodeCharacters(projectId, epId);
+
+  // 3. 获取 prompt 模板并构建
+  const sc = { userId, projectId };
+  const slotContents = await resolveSlotContents("video_prompt_optimize", sc);
+  if (!slotContents || !slotContents.system) {
+    return NextResponse.json({ error: "Prompt definition not found" }, { status: 500 });
+  }
+
+  const system = slotContents.system;
+  let user = slotContents.user_template;
+
+  const title = ep?.title || proj?.title || "";
+  const visualStyle = ep?.visualStyle || proj?.visualStyle || "";
+  const eraAesthetic = ep?.eraAesthetic || proj?.eraAesthetic || "";
+  const moodDirection = ep?.moodDirection || proj?.moodDirection || "";
+  const colorPalette = ep?.colorPalette || proj?.colorPalette || "";
+
+  const charLines = chars.length > 0
+    ? chars.map(c => `- ${c.name}: ${c.visualHint || c.description || ""}`).join("\n")
+    : "（无角色参考）";
+
+  const shotsContext = allShots.map(s => {
+    const vp = (s.videoPrompt || "").trim();
+    return [
+      "──────────────────────────────────────",
+      `Shot ${s.sequence} | 时长 ${s.duration || 10}s | 转入: ${s.transitionIn || "cut"} | 转出: ${s.transitionOut || "cut"}`,
+      `场景: ${s.prompt || ""}`,
+      `动作: ${(s.motionScript || "").slice(0, 300)}`,
+      `时间段: ${s.timeOfDay || "未指定"}`,
+      "━━━ 原始视频提示词 ━━━",
+      vp,
+      "──────────────────────────────────────",
+    ].join("\n");
+  }).join("\n\n");
+
+  user = user
+    .replace("{title}", title)
+    .replace("{visualStyle}", visualStyle)
+    .replace("{eraAesthetic}", eraAesthetic)
+    .replace("{moodDirection}", moodDirection)
+    .replace("{colorPalette}", colorPalette)
+    .replace("{characters}", charLines)
+    .replace("{shotCount}", String(allShots.length))
+    .replace("{shots_context}", shotsContext);
+
+  // 4. 调用 LLM
+  const provider = resolveAIProvider(modelConfig);
+  const raw = await provider.generateText(user, {
+    systemPrompt: system,
+    temperature: 0.4,
+  });
+
+  // 5. 解析 JSON
+  let parsed: OptimizeResult;
+  try {
+    parsed = parseLLMJSON(raw) as OptimizeResult;
+    if (!parsed.shots || !Array.isArray(parsed.shots)) {
+      throw new Error("Missing shots array in response");
+    }
+  } catch (err) {
+    return NextResponse.json({
+      error: `JSON解析失败: ${err instanceof Error ? err.message : "未知错误"}`,
+      raw: raw.slice(0, 1000),
+    }, { status: 500 });
+  }
+
+  // 6. 写回 DB（完整输出，原子写入）
+  const shotsById = new Map(allShots.map(s => [s.sequence, s]));
+  let written = 0;
+  const notFound: number[] = [];
+
+  for (const s of parsed.shots) {
+    const shot = shotsById.get(s.sequence);
+    if (!shot) { notFound.push(s.sequence); continue; }
+    if (!s.video_prompt?.trim()) continue;
+    await db.update(shots)
+      .set({ videoPrompt: s.video_prompt })
+      .where(eq(shots.id, shot.id));
+    written++;
+  }
+
+  console.log(`[OptimizeVideoPrompts] Written ${written}/${allShots.length} shots${notFound.length ? ", not found: " + notFound.join(",") : ""}`);
+
+  // 7. 返回
+  return NextResponse.json({
+    domain_analysis: parsed.domain_analysis,
+    self_check: parsed.self_check,
+    optimized: written,
+    total: allShots.length,
+    not_found: notFound.length > 0 ? notFound : undefined,
+  });
+}
+

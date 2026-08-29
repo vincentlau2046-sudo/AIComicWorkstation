@@ -64,6 +64,7 @@
     "batchGenerateSceneFrames": "批量生成场景参考帧",
     "batchGenerateSceneFramesOverwrite": "重新生成所有场景帧",
     "batchGenerateVideoPrompts": "批量生成视频提示词",
+    "batchOptimizeVideoPrompts": "提示词优化",
     "batchGenerateReferenceVideos": "批量生成视频",
     "batchGenerateFramesOverwrite": "重新生成所有首尾帧",
     "batchGenerateVideosOverwrite": "重新生成所有视频",
