@@ -97,6 +97,62 @@ export async function handleShotSplit(task: Task) {
   // Handle both formats: scene-grouped array or flat shot array (backwards compat)
   const isSceneGrouped = parsed.length > 0 && Array.isArray((parsed[0] as Record<string, unknown>).shots);
 
+  // ── D1 deterministic transition post-check (2026-08-29 EP02 复盘) ──
+  // LLM 输出的转场字段不可靠：这里做确定性校正：首镜 fade_in、尾镜 fade_out、
+  // 场景/时间跳变边界强制 dissolve。
+  const TIME_ORDER = ["黎明", "清晨", "午时", "午后", "傍晚", "深夜"];
+  const timeOfDayDistance = (a?: string, b?: string): number => {
+    const ia = a ? TIME_ORDER.indexOf(a) : -1;
+    const ib = b ? TIME_ORDER.indexOf(b) : -1;
+    if (ia < 0 || ib < 0) return 1;
+    return Math.abs(ia - ib);
+  };
+
+  const envSignature = (shotData: Record<string, unknown>): string => {
+    const inherited = shotData.sceneDescription;
+    if (typeof inherited === "string" && inherited.length > 0) return inherited;
+    const envs = shotData.environmentPrompts;
+    if (Array.isArray(envs) && envs.length > 0) return String(envs[0] || "");
+    return "";
+  };
+
+  const flatShots: Array<Record<string, unknown>> = isSceneGrouped
+    ? (() => {
+        const out: Array<Record<string, unknown>> = [];
+        for (const scene of parsed as unknown as Array<Record<string, unknown>>) {
+          const desc: string = (scene.sceneDescription as string) || "";
+          const sceneShots = (scene.shots as Array<Record<string, unknown>>) || [];
+          for (const shot of sceneShots) {
+            shot.sceneDescription = desc; // inherit scene context for boundary detection
+            out.push(shot);
+          }
+        }
+        return out;
+      })()
+    : (parsed as Array<Record<string, unknown>>);
+
+  if (flatShots.length > 0) {
+    flatShots[0].transitionIn = "fade_in";
+    flatShots[flatShots.length - 1].transitionOut = "fade_out";
+    let dissolveCount = 0;
+    for (let i = 1; i < flatShots.length; i++) {
+      const prev = flatShots[i - 1];
+      const cur = flatShots[i];
+      const prevEnv = envSignature(prev).slice(0, 40);
+      const curEnv = envSignature(cur).slice(0, 40);
+      const sceneJump = prevEnv !== curEnv;
+      const timeJump =
+        timeOfDayDistance(
+          prev.timeOfDay as string | undefined,
+          cur.timeOfDay as string | undefined
+        ) >= 2;
+      if ((sceneJump || timeJump) && (prev.transitionOut ?? "cut") === "cut") {
+        prev.transitionOut = "dissolve";
+        dissolveCount++;
+      }
+    }
+  }
+
   const created = [];
 
   const insertShot = async (

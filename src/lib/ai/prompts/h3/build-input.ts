@@ -5,7 +5,7 @@
 // ═══════════════════════════════════════════════
 
 import { db } from "@/lib/db";
-import { characters, characterRelations, dialogues, episodes, projects, scenes, shotAssets } from "@/lib/db/schema";
+import { characters, characterRelations, dialogues, episodes, projects, scenes, shots, shotAssets } from "@/lib/db/schema";
 import { getEpisodeCharacters } from "@/lib/db/episode-characters";
 import { eq, and, asc, inArray, or, desc } from "drizzle-orm";
 import { stripCharHint } from "@/lib/shot-asset-utils";
@@ -180,6 +180,67 @@ export async function buildH3Input(opts: BuildH3InputOptions): Promise<H3PromptI
     genMode = (project.generationMode as "keyframe" | "reference") || "keyframe";
   }
 
+  // ── Previous-shot continuity context (2026-08-29) ──
+  // 批量并发生成时顺序已知：上一镜数据（shots 表）在提示词生成时刻即可用，
+  // 不依赖上一镜视频产物。末帧描述优先取上一镜 last_frame 资产 prompt，
+  // 回退取上一镜 motionScript 末段。
+  let prevShotContext: H3PromptInput["prevShotContext"];
+  if (shot.episodeId) {
+    const [curMeta] = await db
+      .select({
+        sequence: shots.sequence,
+        transitionOut: shots.transitionOut,
+        timeOfDay: shots.timeOfDay,
+      })
+      .from(shots)
+      .where(eq(shots.id, shot.id))
+      .all();
+    if (curMeta) {
+      const [prev] = await db
+        .select({
+          id: shots.id,
+          motionScript: shots.motionScript,
+          transitionOut: shots.transitionOut,
+          timeOfDay: shots.timeOfDay,
+        })
+        .from(shots)
+        .where(
+          and(
+            eq(shots.episodeId, shot.episodeId),
+            eq(shots.sequence, curMeta.sequence - 1),
+          )
+        )
+        .all();
+      if (prev) {
+        let endFrameDesc = "";
+        const [lf] = await db
+          .select({ prompt: shotAssets.prompt, status: shotAssets.status })
+          .from(shotAssets)
+          .where(
+            and(
+              eq(shotAssets.shotId, prev.id),
+              eq(shotAssets.type, "last_frame"),
+              eq(shotAssets.isActive, 1),
+            )
+          )
+          .orderBy(desc(shotAssets.assetVersion))
+          .all();
+        if (lf && lf.status === "completed" && lf.prompt) {
+          endFrameDesc = lf.prompt;
+        } else if (prev.motionScript) {
+          endFrameDesc = prev.motionScript.slice(-200);
+        }
+        if (endFrameDesc) {
+          prevShotContext = {
+            endFrame: endFrameDesc,
+            transition: prev.transitionOut ?? "cut",
+            timeOfDay: prev.timeOfDay ?? undefined,
+          };
+        }
+      }
+    }
+  }
+
   return {
     videoScript: shot.videoScript || shot.motionScript || shot.prompt || "",
     motionScript: shot.motionScript,
@@ -214,6 +275,7 @@ export async function buildH3Input(opts: BuildH3InputOptions): Promise<H3PromptI
     eraAesthetic: project?.eraAesthetic || episodeEraAesthetic || undefined,
     activeModules: process.env.H3_FL2V_NARRATION !== "off" ? ["narration"] : [],
     spatialHints: spatialHints.length > 0 ? spatialHints : undefined,
+    prevShotContext,
     languageMode: (process.env.H3_LANGUAGE as "auto" | "en" | "zh" | undefined) || "auto",
     ...extraFields,
   };

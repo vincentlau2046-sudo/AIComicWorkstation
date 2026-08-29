@@ -113,6 +113,21 @@ function buildContentLayer(input: H3PromptInput, lang: H3Language): string {
   }
   out.push(L(`时长: ${input.duration || 10}s`, `Duration: ${input.duration || 10}s`));
 
+  // ── 连续性/转场（2026-08-29）── 上一镜末帧状态 + 本镜转场类型
+  if (input.prevShotContext) {
+    out.push("");
+    const contHeader = L("=== 连续性/转场 ===", "=== CONTINUITY / TRANSITION ===");
+    out.push(r("continuity_header", contHeader));
+    out.push(L(`上一镜结束状态：${input.prevShotContext.endFrame.slice(0, 200)}`, `Previous-shot end state: ${input.prevShotContext.endFrame.slice(0, 200)}`));
+    out.push(L(`本镜转场类型：${input.prevShotContext.transition}（来自上一镜 transitionOut）`, `This shot transition: ${input.prevShotContext.transition} (from previous shot transitionOut)`));
+    out.push(
+      L(
+        "要求：detailed_description 首个时间段（0.0s-3.0s）的开场帧必须从上一镜结束状态自然延续，开场帧禁止出现场景/光线/人物外观跳变。",
+        "Requirement: the opening frame of the first time segment (0.0s-3.0s) of detailed_description must continue naturally from the previous shot\'s end state; no scene/lighting/character-appearance jumps at the opening frame."
+      )
+    );
+  }
+
   out.push("");
   if (input.dialogues?.length) {
     out.push(r("dialogue_header", L(`=== 对白 ===`, `=== DIALOGUES ===`)));
@@ -195,6 +210,8 @@ function buildRefConstraintLayer(input: H3PromptInput, lang: H3Language): string
   detail.push(r("action_detail", L("[动作颗粒度]", "[Action Detail]")));
   detail.push(r("body_vocab", L("[身体动词]", "[Body Vocab]")));
   detail.push(r("spatial", L("[画面空间]", "[Spatial Layout]")));
+  const contConstraint = L("[跨镜头连续性]", "[Inter-shot continuity]");
+  detail.push(r("continuity", contConstraint));
   detail.push(r("voice", L("[声音]", "[Voice]")));
   detail.push(r("format", L("[格式]", "[Format]")));
 
@@ -257,7 +274,7 @@ retention_analysis 末尾追加: Background figures: no character references app
 含时间段标签: [0.0s-3.0s] 寒风... [3.0s-6.0s] 踏雪声...
 
 【6】non_diegetic_music:
-中文。乐器+速度+动态。例如: 大提琴缓慢弦乐，极轻(pp)开始，6.0s渐强至中弱(mp)，12.0s渐弱至无声。
+中文。乐器+速度+动态。例如: 大提琴缓慢弦乐，极轻(pp)开始，6.0s渐强至中弱(mp)，持续至视频结束（配乐应贯穿整段，不要逐镜渐弱至无声）。
 
 禁止: 省略section, markdown, 重复运镜, 中文body内的冗长英文叙述`,
     `=== OUTPUT FORMAT (FOLLOW OFFICIAL Ref2VA 6-SECTION ORDER) ===
@@ -303,7 +320,7 @@ append to detailed_description: Note: figures other than the defined <Subject N>
 Chinese. Ambience summary. Time-anchored. No shot-specific SFX (they go in detailed_description).
 
 【6】non_diegetic_music:
-Chinese. Instrument + tempo + dynamics + fade.
+Chinese. Instrument + tempo + dynamics; the music sustains through to the end of the video — do NOT fade out at each shot boundary.
 
 FORBIDDEN: skip sections, markdown, repeated camera, English content in Chinese body
   `
@@ -427,6 +444,19 @@ function buildTextFallbackContentLayer(input: H3PromptInput, lang: H3Language): 
     out.push(L(`运镜方向: ${input.cameraDirection} → ${cameraMapped}`, `Camera Direction: ${input.cameraDirection} → ${cameraMapped}`));
   }
   out.push(L(`时长: ${input.duration || 10}s`, `Duration: ${input.duration || 10}s`));
+
+  // ── 连续性/转场（2026-08-29）──
+  if (input.prevShotContext) {
+    out.push("");
+    const contHeader = L("=== 连续性/转场 ===", "=== CONTINUITY / TRANSITION ===");
+    out.push(r("continuity_header", contHeader));
+    out.push(L(`上一镜结束状态：${input.prevShotContext.endFrame.slice(0, 200)}`, `Previous-shot end state: ${input.prevShotContext.endFrame.slice(0, 200)}`));
+    out.push(L(`本镜转场类型：${input.prevShotContext.transition}（来自上一镜 transitionOut）`, `This shot transition: ${input.prevShotContext.transition} (from previous shot transitionOut)`));
+    out.push(L(
+      "要求：detailed_description 首个时间段（0.0s-3.0s）的开场帧必须从上一镜结束状态自然延续，开场帧禁止出现场景/光线/人物外观跳变。",
+      "Requirement: the opening frame of the first time segment (0.0s-3.0s) of detailed_description must continue naturally from the end state of the previous shot; no scene/lighting/character-appearance jumps at the opening frame."
+    ));
+  }
 
   // Dialogues, narrations, audio — reuse same structure as VL content layer
   if (input.dialogues?.length) {

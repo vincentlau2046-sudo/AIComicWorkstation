@@ -197,16 +197,23 @@ const SCRIPT_GENERATE_SCENE_SECTION = `=== 3. 场景 ===
 （自言自语，微微喘气）
 "又差点迟到……"
 
-（近景切换）弄堂深处，赵东明倚在自家门框上，手里夹着一根没点燃的烟，眯眼看着晓月骑车过来，嘴角不易察觉地微微上扬。`;
+（近景切换）弄堂深处，赵东明倚在自家门框上，手里夹着一根没点燃的烟，眯眼看着晓月骑车过来，嘴角不易察觉地微微上扬。
+
+旁白（画外音）格式：
+旁白："三年后，广宁卫。"
+内心独白（角色内心戏）格式：
+林晓月（内心）："他们以为我只是一个白弱的罪囚，没料到，我咽下的是复仇的冷。"
+场景结尾的对白、旁白、内心独白可组合构成完整的声音层。`;
 
 const SCRIPT_GENERATE_SCREENWRITING_PRINCIPLES = `编剧原则：
 - 以"钩子"开场——一个引人注目的视觉画面或令人好奇的瞬间
 - 每个场景都必须服务于故事：推进情节、揭示角色或制造张力
-- "展示，而非讲述"——优先用视觉叙事取代旁白说明
+- 【短视频声音密度规则】每个场景/镜头必须包含 角色对白、旁白、角色内心独白 至少一种，且至少 80% 的镜头达标。旁白用于跨时空跳转与信息补充；内心独白用于角色心理外化。
 - 对白应自然生动；潜台词优于直白表达
 - 构建清晰的三幕结构：铺垫 → 冲突 → 解决
+- 【短剧结构硬要求】开场黄金 3 秒必须给出钩子（第一镜头即为冲突画面或强画面，不做慢热铺垫）；每集结尾必须留悬念卡点，指向下一集。
 - 以情感收束结尾——意外、宣泄或一个有力的画面
-- 根据目标时长调整场景数量。如创意中指定了目标时长（如"目标时长：10分钟"），按此计算场景数：约每30-60秒一个场景。10分钟的短片需要10-20个场景，而不是4-8个。
+- 镜头数规划：设定了目标时长 D（秒）时，按每镜头约 8 秒规划，镜头数 ≈ D/8；未设置目标时长则按故事节奏自由展开，不做镜头数限制。
 - 每个场景描述必须足够具体，让AI图像生成器能据此生成画面（描述颜色、空间关系、光照质量）
 - 场景描述应与声明的视觉风格一致（如"写实"则描述摄影细节；如"动漫"则描述动漫美学）
 
@@ -277,15 +284,22 @@ const SCRIPT_GENERATE_SCENE_SECTION_EN = `=== 3. Scenes ===
 Professional screenplay format:
 - Scene heading: "场景 [N] — [内景/外景]. [地点] — [时间]"
 - Scene parenthetical for camera direction
-- Each scene: visual setting (color, spatial relations, lighting quality) + dialogue + action`;
+- Each scene: visual setting (color, spatial relations, lighting quality) + dialogue + action
+
+Narration (画外音) format:
+旁白："三年后，广宁卫。"
+Inner monologue (character inner drama) format:
+林晓月（内心）："他们以为我只是一个白弱的罪囚，没料到，我咽下的是复仇的冷。"
+A scene's closing may combine dialogue, narration and inner monologue into one full voice layer.`;
 const SCRIPT_GENERATE_SCREENWRITING_PRINCIPLES_EN = `Screenwriting principles:
 - Open with a hook — a striking visual image or curiosity moment
 - Every scene must serve the story: advance plot, reveal character, or build tension
-- "Show, don't tell" — prefer visual storytelling over narration
+- [Short-video voice-density rule] Every scene/shot must contain at least one of: character dialogue, narration, or character inner monologue; at least 80% of shots must satisfy this. Narration is for time/space jumps and information filling; inner monologue externalizes character psychology.
 - Dialogue should be natural and vivid; subtext over on-the-nose lines
 - Build a clear three-act structure: setup → conflict → resolution
+- [Short-drama structure] The first shot must open with a golden-3-second hook (immediate conflict or strong image, no slow buildup); every episode must end on a cliffhanger (卡点) that points to the next episode.
 - End on emotional closure — a twist, a catharsis, or a strong image
-- Adjust scene count to the target runtime; ~one scene per 30-60s
+- Shot-count planning: when a target duration D (seconds) is set, plan ~8s per shot, shot count ≈ D/8; if no target duration is set, develop freely with the story's pacing and impose no shot-count limit.
 - Each scene description must be specific enough for the AI image generator (color, spatial relations, lighting quality)
 - Scene descriptions must match the declared visual style
 [Battle/duel special rule] If the idea/title contains battle signal words (大战/对决/决战/battle/fight/duel...), treat it as a real fight: physical combat scenes ≥ 50% of all scenes; both sides must be active combatants; no "epiphany/mental-space" shortcuts.
@@ -416,13 +430,33 @@ const SCRIPT_PARSE_OUTPUT_FORMAT = `输出单个JSON对象：
           "text": "自然的对白内容",
           "emotion": "具体的表演提示（如'压低声音急促地说，眼神游移不定'）"
         }
+      ],
+      "narrations": [
+        {
+          "text": "原文中的旁白/画外音文字",
+          "startTime": 0.0,
+          "endTime": 2.0
+        }
+      ],
+      "innerMonologues": [
+        {
+          "character": "拥有该内心独白的角色名",
+          "text": "原文中的内心独白文字",
+          "startTime": 1.0,
+          "endTime": 3.0
+        }
       ]
     }
   ]
-}`;
+}
+
+【字段完整性规则】每个场景对象必须包含全部键：sceneNumber、setting、description、mood、dialogues、narrations、innerMonologues。场景没有旁白或内心独白时，对应数组写 []——但键本身必须始终存在，不要省略。
+
+【JSON 引号规则】JSON 字符串值内部如需引用，使用中文引号“…”或「…」；绝不在字符串值内使用未转义的英文双引号。`;
 
 const SCRIPT_PARSE_PARSING_RULES = `故事编辑原则（**在原文保真度的前提下**应用，任何与保真度冲突的条款都以保真度优先）：
 - 保留原作者的创作意图、基调和风格——这是字面意义，不要"优化"原作
+- 保留原文中的每一句旁白（画外音）与每一段内心独白，分别映射到场景的 narrations / innerMonologues 字段，不得丢弃
 - 识别叙事弧线：起因 → 发展 → 高潮 → 结局，用于判断场景拆分边界，**不要改写**
 - 每个场景 = 一个连续的5-15秒动画镜头；长段落应拆分为多个场景（宁多勿少）
 - 场景描写必须具有视觉具体性：指定空间关系、角色姿态、光线方向、主色调；但**原文已有的动作描写必须完整保留**，只允许补充（不允许替换）原文没写的视觉细节
@@ -441,7 +475,7 @@ const SCRIPT_PARSE_PARSING_RULES = `故事编辑原则（**在原文保真度的
   "dialogues": []
 }`;
 
-const SCRIPT_PARSE_LANGUAGE_RULES = `【关键语言规则】JSON中的所有文本内容（title、synopsis、setting、description、mood、对白text、emotion）必须使用与原文相同的语言。中文原文 → 中文输出。不要翻译成英文。
+const SCRIPT_PARSE_LANGUAGE_RULES = `【关键语言规则】JSON中的所有文本内容（title、synopsis、setting、description、mood、对白text、emotion、旁白text、内心独白text）必须使用与原文相同的语言。中文原文 → 中文输出。不要翻译成英文。
 
 仅返回有效JSON。不要使用markdown代码块。不要添加任何评论。`;
 
@@ -454,13 +488,25 @@ const SCRIPT_PARSE_OUTPUT_FORMAT_EN = `Output a single JSON object:
   "synopsis": "1-2 sentence story summary, capturing core conflict and stakes",
   "setting": "time and place",
   "mood": "overall emotional tone",
-  "scenes": [ { "description": "...", "dialogues": [ { "character": "...", "text": "...", "emotion": "..." } ] } ]
-}`;
+  "scenes": [
+    {
+      "description": "...",
+      "dialogues": [ { "character": "...", "text": "...", "emotion": "..." } ],
+      "narrations": [ { "text": "narration / voice-over line from the source", "startTime": 0.0, "endTime": 2.0 } ],
+      "innerMonologues": [ { "character": "character who owns the monologue", "text": "inner monologue line from the source", "startTime": 1.0, "endTime": 3.0 } ]
+    }
+  ]
+}
+
+FIELD COMPLETENESS RULE: every scene object MUST contain ALL keys: sceneNumber, setting, description, mood, dialogues, narrations, innerMonologues. Use [] for empty arrays — never omit the keys.
+
+JSON QUOTING RULE: inside JSON string values, use Chinese quotes “…” or 「…」 for inner quotations. Never use unescaped ASCII double quotes inside a string value.`;
 const SCRIPT_PARSE_PARSING_RULES_EN = `Story-editing principles (applied **on the premise of source fidelity**; any clause that conflicts with fidelity defers to it):
 - Preserve the author's intent, tone, and style
+- Preserve every narration (voice-over) line and every inner monologue found in the source — map them into the scene-level \`narrations\` and \`innerMonologues\` fields; never drop them
 - Keep scene boundaries at natural narrative turns
 - Never drop dialogue or visual detail`;
-const SCRIPT_PARSE_LANGUAGE_RULES_EN = `[Language rule] All text content in the JSON (title, synopsis, setting, description, mood, dialogue text, emotion) must use the same language as the source. Chinese source → Chinese output. Do not translate to English.
+const SCRIPT_PARSE_LANGUAGE_RULES_EN = `[Language rule] All text content in the JSON (title, synopsis, setting, description, mood, dialogue text, emotion, narration text, inner monologue text) must use the same language as the source. Chinese source → Chinese output. Do not translate to English.
 
 Return only valid JSON. No markdown code fences. No comments.`;
 
@@ -2031,6 +2077,8 @@ const SHOT_SPLIT_OUTPUT_FORMAT_TEMPLATE = `输出 JSON 数组（只输出共享�
     ],
     "time_of_day": "清晨|午时|午后|傍晚|深夜|黎明",
     "timeline": "主线|平行|闪回",
+    "transitionIn": "cut | dissolve | fade_in | fade_out | wipeleft | slideright | circleopen",
+    "transitionOut": "cut | dissolve | fade_in | fade_out | wipeleft | slideright | circleopen",
     "environmentPrompts": ["纯场景环境描述（不含角色、动作、对白）。无转场时为单元素数组；跨地点/光线质变/多节点空间时按时间排列，第0个为起始环境"]
   }
 ]`;
@@ -2135,7 +2183,7 @@ const SHOT_SPLIT_CAMERA_DIRECTIONS = `镜头运动指令（cameraDirection 字�
 - "push in" — 缓慢前推强调`;
 
 const SHOT_SPLIT_CINEMATOGRAPHY_PRINCIPLES_TEMPLATE = `摄影原则：
-- 变化景别——避免连续镜头使用相同构图；全景/中景/特写交替使用
+- 景别阶梯：同一场景内按 全景 → 中景 → 近景 → 特写 渐进变化，禁止从大全景直切特写（需插入过渡景别）；避免连续镜头使用相同构图
 - 新场景开头使用定场镜头
 - 重要对白或事件后使用反应镜头
 - 在动作中切换——每个镜头在允许平滑过渡到下一个镜头的时刻结束
@@ -2174,7 +2222,7 @@ const SHOT_SPLIT_FIDELITY_RULES_EN = `=== Script Fidelity (top priority — this
 You are a director, not an editor. **No condensing, no compressing, no omitting** any narrative content from the script. Every line of dialogue, action, and scene description in the source must be carried into the shots.`;
 const SHOT_SPLIT_OUTPUT_FORMAT_EN = `Output a JSON array (only shared shot metadata; the downstream generates first/last frames and reference images from the same metadata):
 [
-  { "sequence": 1, "sceneDescription": "...", "startFrame": "...", "endFrame": "...", "motionScript": "...", "videoScript": "...", "duration": {{MIN_DURATION}}, "cameraDirection": "static", "dialogues": [ { "character": "...", "text": "...", "emotion": "..." } ] }
+  { "sequence": 1, "sceneDescription": "...", "startFrame": "...", "endFrame": "...", "motionScript": "...", "videoScript": "...", "duration": {{MIN_DURATION}}, "cameraDirection": "static", "transitionIn": "cut", "transitionOut": "cut", "dialogues": [ { "character": "...", "text": "...", "emotion": "..." } ] }
 ]
 Only shared metadata is output — the actual frame and reference images are generated downstream from it.`;
 const SHOT_SPLIT_START_END_FRAME_RULES_EN = `=== First & last frame requirements (critical — drives image generation directly) ===
@@ -2192,7 +2240,7 @@ const SHOT_SPLIT_CAMERA_DIRECTIONS_EN = `Camera-movement directions (for the cam
 **Important: cameraDirection is technical metadata; values must come from the list below.**
 Allowed: static, pan left, pan right, tilt up, tilt down, dolly in, dolly out, truck left, truck right, crane up, crane down, handheld, orbit, zoom in, zoom out, handheld shake. Write exactly one of these terms; keep it in English (technical term).`;
 const SHOT_SPLIT_CINEMATOGRAPHY_PRINCIPLES_EN = `Cinematography principles:
-- Vary shot scale — alternate wide / medium / close-up; avoid identical framing on consecutive shots
+- Shot-size ladder: within a scene, progress wide → medium → close-up → extreme close-up; never cut straight from a wide establishing shot to a close-up (insert an intermediate framing); avoid identical framing on consecutive shots
 - Open new scenes with an establishing shot
 - Use reaction shots after important dialogue or events
 - Keep action momentum; match shot length to {{MIN_DURATION}}–{{MAX_DURATION}}s
@@ -2200,6 +2248,29 @@ const SHOT_SPLIT_CINEMATOGRAPHY_PRINCIPLES_EN = `Cinematography principles:
 const SHOT_SPLIT_LANGUAGE_RULES_EN = `[Language rule] All text fields (sceneDescription, startFrame, endFrame, motionScript, dialogues.text, dialogues.character) must use the same language as the script. If the script is Chinese, all fields are Chinese. Only "cameraDirection" stays in English (technical term).`;
 const SHOT_SPLIT_VOICE_CONSTRAINT_EN = `〓 Voice constraints — per-shot hard rules (every shot must comply)
 ⚠️ Every shot must satisfy: narrations + innerMonologue + dialogues count within limits; no shot may exceed the per-shot voice budget.`;
+
+const SHOT_SPLIT_TRANSITION_GUIDE = `=== 转场决策规则（2026-08-29 新增，EP02 复盘）===
+每个镜头必须填写 transitionIn / transitionOut，取值只能来自下方列表（合成层 ffmpeg xfade 直接消费这些值）：
+- cut（硬切）/ dissolve（叠化）/ fade_in / fade_out / wipeleft / slideright / circleopen
+
+决策规则（按优先级）：
+1. 场景/地点/光线/时间发生跳变的边界 → 该边界必须使用 dissolve（或 fade）
+2. 同场景、同角色、连续动作 → 使用 cut（默认）
+3. 全片第一个镜头：transitionIn 必须为 fade_in；全片最后一个镜头：transitionOut 必须为 fade_out
+4. 戏剧性时间跳跃或蒙太奇 → 使用 wipeleft 或 circleopen
+5. 连续 dissolve 不超过 2 个
+⚠️ 不确定时：在场景变化边界默认用 dissolve；cut 只用于同场景内的连续动作。`;
+const SHOT_SPLIT_TRANSITION_GUIDE_EN = `=== Transition decision rules ===
+Every shot must fill transitionIn / transitionOut. Allowed values (consumed directly by the assembly layer):
+- cut (hard cut) / dissolve / fade_in / fade_out / wipeleft / slideright / circleopen
+
+Decision rules (by priority):
+1. Boundary with a jump in scene / location / lighting / time → must use dissolve (or fade)
+2. Same scene, same characters, continuous action → use cut (default)
+3. First shot of the episode: transitionIn must be fade_in; last shot: transitionOut must be fade_out
+4. Dramatic time jumps or montage → use wipeleft or circleopen
+5. No more than 2 consecutive dissolves
+⚠️ When in doubt at a scene-change boundary, default to dissolve; use cut only for continuous action within the same scene.`;
 
 const shotSplitDef: PromptDefinition = {
   key: "shot_split",
@@ -2221,6 +2292,7 @@ const shotSplitDef: PromptDefinition = {
       true,
       SHOT_SPLIT_CINEMATOGRAPHY_PRINCIPLES_EN
     ),
+    slot("transition_guide", SHOT_SPLIT_TRANSITION_GUIDE, true, SHOT_SPLIT_TRANSITION_GUIDE_EN),
     slot("language_rules", SHOT_SPLIT_LANGUAGE_RULES, false, SHOT_SPLIT_LANGUAGE_RULES_EN),
     slot("voice_constraint", SHOT_SPLIT_VOICE_CONSTRAINT, true, SHOT_SPLIT_VOICE_CONSTRAINT_EN),
   ],
@@ -2306,6 +2378,8 @@ const shotSplitDef: PromptDefinition = {
       r("camera_directions"),
       "",
       cinematography,
+      "",
+      r("transition_guide"),
       "",
       r("language_rules"),
     ].join("\n");
@@ -4324,6 +4398,10 @@ const REF_CONTENT_INNER_MONOLOGUE_HEADER_EN = `=== Inner monologue (pre-generate
 The following monologue is auto-generated from the script; it must be embedded into the corresponding time segments of detailed_description:`;
 const REF_CONTENT_AUDIO_HEADER_EN = `=== Audio reference ===`;
 
+const REF_CONTENT_CONTINUITY_HEADER =
+`=== 连续性/转场 ===`;
+const REF_CONTENT_CONTINUITY_HEADER_EN =
+`=== CONTINUITY / TRANSITION ===`;
 const refContentH3Def: PromptDefinition = {
   key: "ref_video_h3_content",
   nameKey: "promptTemplates.prompts.refVideoH3Content",
@@ -4335,6 +4413,7 @@ const refContentH3Def: PromptDefinition = {
     slot("characters", REF_CONTENT_CHARACTERS, false, REF_CONTENT_CHARACTERS_EN),
     slot("scene_shot", REF_CONTENT_SCENE_SHOT, false, REF_CONTENT_SCENE_SHOT_EN),
     slot("motion_camera", REF_CONTENT_MOTION_CAMERA, true, REF_CONTENT_MOTION_CAMERA_EN),
+    slot("continuity_header", REF_CONTENT_CONTINUITY_HEADER, false, REF_CONTENT_CONTINUITY_HEADER_EN),
     slot("dialogue_header", REF_CONTENT_DIALOGUE_HEADER, false, REF_CONTENT_DIALOGUE_HEADER_EN),
     slot("narration_header", REF_CONTENT_NARRATION_HEADER, false, REF_CONTENT_NARRATION_HEADER_EN),
     slot("inner_monologue_header", REF_CONTENT_INNER_MONOLOGUE_HEADER, false, REF_CONTENT_INNER_MONOLOGUE_HEADER_EN),
@@ -4343,7 +4422,7 @@ const refContentH3Def: PromptDefinition = {
   buildFullPrompt(sc) {
     const s = this.slots;
     const r = (k: string) => resolve(sc, s, k);
-    return [r("role_task"), "", r("image_mapping"), r("characters"), r("scene_shot"), r("motion_camera"), r("dialogue_header"), r("narration_header"), r("inner_monologue_header"), r("audio_header")].join("\n");
+    return [r("role_task"), "", r("image_mapping"), r("characters"), r("scene_shot"), r("motion_camera"), r("continuity_header"), r("dialogue_header"), r("narration_header"), r("inner_monologue_header"), r("audio_header")].join("\n");
   },
 };
 
@@ -4369,9 +4448,9 @@ R6. 赋予每个参考图一个明确的职能：在 detailed_description 开头
 
 const REF_CONSTRAINT_ENV_REFERENCE = `【环境 — 通过标签引用，声明职能】
 R7. 场景帧参考图提供环境风格和布局——使用 <Picture N> 标签引用，不要逐字重述图中内容
-R8. 声明每张场景参考图的职能："<Picture 1> provides the market layout; target lighting is cold dawn."
+R8. 声明每张场景参考图的职能："<Picture 1> provides the market layout; target lighting is moonlit snow night."
 R9. 描述目标视频中你希望生成的环境光照和动态变化
-    正确: "<Picture 1> provides city gate layout; cold morning mist rolls in from the right."
+    正确: "<Picture 1> provides city gate layout; thin snow drifts under the moonlight from the right."
     错误: "<Picture 1> shows a city gate with grey stone walls and wooden doors."`;
 
 const REF_CONSTRAINT_TIME_STRUCTURE = `【时间结构 — 强制执行】
@@ -4462,9 +4541,9 @@ R5. <Subject N> is for reusable visual content (characters / scenes / props); <P
 R6. Give each reference image a clear role: declare each image's function at the start of detailed_description.`;
 const REF_CONSTRAINT_ENV_REFERENCE_EN = `【Environment — cite by tag, declare function】
 R7. Scene-frame reference images provide the environment style and layout — cite them with <Picture N> tags; do not restate the image content verbatim.
-R8. Declare each scene reference image's function: "<Picture 1> provides the market layout; target lighting is cold dawn."
+R8. Declare each scene reference image's function: "<Picture 1> provides the market layout; target lighting is moonlit snow night."
 R9. Describe the environment lighting and dynamic changes you want in the target video.
-    Right: "<Picture 1> provides city gate layout; cold morning mist rolls in from the right."
+    Right: "<Picture 1> provides city gate layout; thin snow drifts under the moonlight from the right."
     Wrong: "<Picture 1> shows a city gate with grey stone walls and wooden doors."`;
 const REF_CONSTRAINT_TIME_STRUCTURE_EN = `【Time structure — mandatory】
 R10. Split into sub-segments every 2-3s.
@@ -4533,6 +4612,20 @@ R24. No markdown, code blocks, or comments — pure H3-format output.
 R25. Do not copy the script verbatim — convert it into rich, film-grade prose.
 R26. Characters are already in the reference images — describe only actions and state changes; do not describe static appearance.`;
 
+const REF_CONSTRAINT_CONTINUITY =
+`【镜头间连续性 — 跨镜头衔接（2026-08-29 新增，EP02 复盘）】
+R34-HARD: 当输入提供连续性/转场上下文（上一镜结束状态 + 本镜转场类型）时：
+  - detailed_description 首个时间段（0.0s-3.0s）的开场帧必须从上一镜结束状态自然延续，开场帧禁止出现场景/光线/人物外观跳变
+  - 转场类型为 dissolve/fade 时，开场帧须与上一镜结束状态平滑衔接；cut 时可直接切换，但环境与人物位置须逻辑连贯
+R34b: 未提供上一镜上下文时（首个镜头或数据缺失），开场帧须独立成立——构图完整、视觉稳定。
+`;
+const REF_CONSTRAINT_CONTINUITY_EN =
+`【Inter-shot continuity — cross-shot handoff (added 2026-08-29, EP02 review)】
+R34-HARD: When the input provides a continuity/transition context (end state of the previous shot + this shot transition type):
+  - The opening frame of the first time segment (0.0s-3.0s) of detailed_description must continue naturally from the end state of the previous shot; no scene/lighting/character-appearance jumps at the opening frame.
+  - For dissolve/fade transitions, the opening frame must blend smoothly with the end state of the previous shot; for cut, it may switch directly, but environment and character positions must stay logically consistent.
+R34b: When no previous-shot context is provided (first shot or missing data), the opening frame must stand alone — compositionally complete and visually stable.
+`;
 const refConstraintsH3Def: PromptDefinition = {
   key: "ref_video_h3_constraints",
   nameKey: "promptTemplates.prompts.refVideoH3Constraints",
@@ -4550,6 +4643,7 @@ const refConstraintsH3Def: PromptDefinition = {
     slot("format", REF_CONSTRAINT_FORMAT, true, REF_CONSTRAINT_FORMAT_EN),
     slot("spatial", REF_CONSTRAINT_SPATIAL, true, REF_CONSTRAINT_SPATIAL_EN),
     slot("ref_scope", REF_CONSTRAINT_REF_SCOPE, true, REF_CONSTRAINT_REF_SCOPE_EN),
+    slot("continuity", REF_CONSTRAINT_CONTINUITY, true, REF_CONSTRAINT_CONTINUITY_EN),
   ],
   buildFullPrompt(sc) {
     const s = this.slots;
@@ -4566,6 +4660,7 @@ const refConstraintsH3Def: PromptDefinition = {
       r("body_vocab"), "",
       r("spatial"), "",
       r("ref_scope"), "",
+      r("continuity"), "",
       r("voice"), "",
       r("format"),
     ].join("\n");

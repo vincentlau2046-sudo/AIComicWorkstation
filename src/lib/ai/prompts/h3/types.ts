@@ -120,6 +120,13 @@ export interface H3PromptInput {
   /** Spatial positioning hints for multi-character shots, derived from character_relations.
    *  e.g. "朱元璋与陈友谅为敌对，应相对而立，画面中轴线左右分布" */
   spatialHints?: string[];
+  /** 上一镜连续性上下文（2026-08-29 新增）：上一镜末帧状态 + 本镜转场类型。
+   *  批量并行生成时来自 shots 表数据，不依赖上一镜视频产物。 */
+  prevShotContext?: {
+    endFrame: string;
+    transition: string;
+    timeOfDay?: string;
+  };
 }
 
 export interface H3PromptOutput {

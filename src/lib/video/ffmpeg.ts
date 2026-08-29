@@ -318,20 +318,25 @@ export async function assembleVideo(params: AssembleParams): Promise<AssembleRes
   // Step 3: Mix background music if provided
   if (params.bgmPath && fs.existsSync(path.resolve(params.bgmPath))) {
     const bgmOutputPath = outputPath.replace(/\.mp4$/, `-bgm.mp4`);
-    const vol = params.bgmVolume ?? 0.3;
+    const bgmVol = params.bgmVolume ?? 0.3; // D7 方案A：BGM 音量（默认 0.3，与 AssembleParams 注释一致）
+    const bedVol = 0.25;                 // D7 方案A：保留成片原声作低音量环境底噪
 
     try {
       await new Promise<void>((resolve, reject) => {
         ffmpeg()
           .input(outputPath)
           .input(path.resolve(params.bgmPath!))
+          .inputOptions(["-stream_loop", "-1"]) // BGM 循环，避免 -shortest 截断成片
+          .complexFilter(
+            `[0:a]volume=${bedVol}[bed];[1:a]volume=${bgmVol}[bgm];[bed][bgm]amix=inputs=2:normalize=0:duration=shortest[mix]`,
+            "mix"
+          )
           .outputOptions([
             "-map", "0:v",
-            "-map", "1:a",
+            "-map", "[mix]",
             "-c:v", "copy",
             "-c:a", "aac",
-            "-af", `volume=${vol}`,
-            "-shortest",
+            "-movflags", "faststart",
           ])
           .output(bgmOutputPath)
           .on("end", () => {
