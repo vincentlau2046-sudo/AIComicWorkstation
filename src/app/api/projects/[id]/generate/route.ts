@@ -4967,9 +4967,25 @@ interface OptimizeResult {
   shots: Array<{
     sequence: number;
     role: string;
-    video_prompt: string;
+    non_diegetic_music: string;
+    overall_soundscape: string | null;
     changes: string[];
   }>;
+}
+
+// H3 6-section format: replace a named section in the original video_prompt.
+function replaceSection(text: string, header: string, newContent: string): string {
+  const startMarker = "\n" + header + ":\n";
+  const idx = text.indexOf(startMarker);
+  if (idx < 0) return text;
+  const contentStart = idx + startMarker.length;
+  if (header === "non_diegetic_music") {
+    return text.slice(0, contentStart) + newContent;
+  }
+  const nextMarker = "\nnon_diegetic_music:\n";
+  const nextIdx = text.indexOf(nextMarker, contentStart);
+  const contentEnd = nextIdx >= 0 ? nextIdx : text.length;
+  return text.slice(0, contentStart) + newContent + text.slice(contentEnd);
 }
 
 async function handleOptimizeVideoPrompts(
@@ -5096,7 +5112,7 @@ async function handleOptimizeVideoPrompts(
     }, { status: 500 });
   }
 
-  // 6. 写回 DB（完整输出，原子写入）
+  // 6. Section 合并写入（只替换变化的字段，保持原格式）
   const shotsById = new Map(allShots.map(s => [s.sequence, s]));
   let written = 0;
   const notFound: number[] = [];
@@ -5104,9 +5120,16 @@ async function handleOptimizeVideoPrompts(
   for (const s of parsed.shots) {
     const shot = shotsById.get(s.sequence);
     if (!shot) { notFound.push(s.sequence); continue; }
-    if (!s.video_prompt?.trim()) continue;
+    let merged = shot.videoPrompt || "";
+    if (s.non_diegetic_music?.trim()) {
+      merged = replaceSection(merged, "non_diegetic_music", s.non_diegetic_music);
+    }
+    if (s.overall_soundscape?.trim()) {
+      merged = replaceSection(merged, "overall_soundscape", s.overall_soundscape);
+    }
+    if (merged === (shot.videoPrompt || "")) continue; // 无变化，跳过
     await db.update(shots)
-      .set({ videoPrompt: s.video_prompt })
+      .set({ videoPrompt: merged })
       .where(eq(shots.id, shot.id));
     written++;
   }
