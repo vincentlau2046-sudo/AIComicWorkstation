@@ -185,46 +185,56 @@ async function concatWithTransitions(
     cmd.input(path.resolve(vp));
   }
 
-  // Build xfade filter chain
-  const filterParts: string[] = [];
-  let prevLabel = "0:v";
+  // Build xfade filter chain for video + acrossfade for audio
+  const videoFilters: string[] = [];
+  const audioFilters: string[] = [];
+  let prevVideoLabel = "0:v";
+  let prevAudioLabel = "0:a";
   let cumulativeOffset = 0;
 
   for (let i = 0; i < transitions.length; i++) {
     const t = transitions[i];
     const duration = shotDurations[i];
-    const outLabel = i < transitions.length - 1 ? `v${i}` : "vout";
+    const outVideoLabel = i < transitions.length - 1 ? `v${i}` : "vout";
+    const outAudioLabel = i < transitions.length - 1 ? `a${i}` : "aout";
+    const xfadeDur = t === "cut" ? 0 : DEFAULT_XFADE_DURATION;
 
     if (t === "cut") {
-      // For cut: use xfade with duration=0 to simulate hard cut
       const offset = cumulativeOffset + duration;
-      filterParts.push(
-        `[${prevLabel}][${i + 1}:v]xfade=transition=fade:duration=0:offset=${offset.toFixed(3)}[${outLabel}]`
+      videoFilters.push(
+        `[${prevVideoLabel}][${i + 1}:v]xfade=transition=fade:duration=0:offset=${offset.toFixed(3)}[${outVideoLabel}]`
       );
       cumulativeOffset = offset;
     } else {
-      const xfadeDur = DEFAULT_XFADE_DURATION;
       const offset = cumulativeOffset + duration - xfadeDur;
       const xfadeName = mapTransitionName(t);
-      filterParts.push(
-        `[${prevLabel}][${i + 1}:v]xfade=transition=${xfadeName}:duration=${xfadeDur}:offset=${offset.toFixed(3)}[${outLabel}]`
+      videoFilters.push(
+        `[${prevVideoLabel}][${i + 1}:v]xfade=transition=${xfadeName}:duration=${xfadeDur}:offset=${offset.toFixed(3)}[${outVideoLabel}]`
       );
       cumulativeOffset = offset;
     }
 
-    prevLabel = outLabel;
+    // Audio: acrossfade for transitions, hard concat for cuts
+    audioFilters.push(
+      `[${prevAudioLabel}][${i + 1}:a]acrossfade=d=${(xfadeDur || 0.01).toFixed(3)}:c1=tri:c2=tri[${outAudioLabel}]`
+    );
+
+    prevVideoLabel = outVideoLabel;
+    prevAudioLabel = outAudioLabel;
   }
 
-  const complexFilter = filterParts.join(";");
+  const complexFilter = [...videoFilters, ...audioFilters].join(";");
 
   await new Promise<void>((resolve, reject) => {
     cmd
-      .complexFilter(complexFilter, "vout")
+      .complexFilter(complexFilter, ["vout", "aout"])
       .outputOptions([
         "-c:v", "libx264",
         "-preset", "fast",
         "-crf", "23",
-        "-an",
+        "-c:a", "aac",
+        "-map", "[vout]",
+        "-map", "[aout]",
         "-movflags", "faststart",
       ])
       .output(outputPath)
