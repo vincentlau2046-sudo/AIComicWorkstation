@@ -1464,10 +1464,10 @@ export default function EpisodeStoryboardPage() {
                 <h3 className="font-bold text-amber-600 text-base mb-2">配乐弧线设计</h3>
                 <p className="text-[--text-secondary] leading-relaxed whitespace-pre-line">{musiReport.music_arc}</p>
               </section>
-              {musiReport.not_found?.length > 0 && (
+              {musiReport.not_found && musiReport.not_found.length > 0 && (
                 <section className="rounded-md bg-amber-50 border border-amber-200 p-3">
                   <h3 className="font-bold text-amber-700 text-sm">⚠️ 未找到的镜头</h3>
-                  <p className="text-amber-600 text-xs mt-1">Shot {musiReport.not_found.join(", ")} — 已跳过</p>
+                  <p className="text-amber-600 text-xs mt-1">Shot {musiReport.not_found!.join(", ")} — 已跳过</p>
                 </section>
               )}
             </div>
