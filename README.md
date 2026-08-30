@@ -1,6 +1,6 @@
 # AIComicWorkstation (AICF)
 
-> v0.2.0 — MiniMax H3 结构化 Prompt 引擎 · 端到端 AI 漫剧生成器
+> v0.0.7 — 端到端 AI 漫剧生成器 · 镜头转场 + BGM 混音 + 提示词优化
 
 从剧本到动画视频的全自动本地流水线。
 
@@ -27,7 +27,13 @@
 - **视频生成** — ComfyUI H3 工作流基于首尾帧插值生成动画视频
 - **H3 结构化 Prompt** — Base Mode (T2VA/I2VA/FL2VA) + Ref2VA Full-Reference Mode，对齐 MiniMax 官方格式
 - **语言路由** — 中文剧本自动翻译为英文 body（IFF deepseek-v4-flash），对话保留 `<d>` 标签
-- **视频合成** — FFmpeg 拼接所有片段为完整动画
+- **参考图模式** — 角色与场景参考图驱动的 Ref2VA 全参考模式，替代首尾帧插值
+- **镜头转场** — 支持 cut / dissolve / fade / wipe / slideright / circleopen 七种转场，FFmpeg xfade 合成
+- **BGM 混音** — 原声环境底噪 + BGM 叠加，amix 自动混合
+- **配乐叙述原则** — L-Cut 延续 / Hitchcock 沉默 / 叙事驱动配乐，基于电影工业实践
+- **提示词优化** — 全剧集多域（配乐+视觉+音频+节奏）LLM 优化，增量输出
+- **音效优化** — 独立配乐弧线优化：情绪曲线 → 配乐设计 → 逐镜推导
+- **视频合成** — FFmpeg 拼接所有片段为完整动画，支持转场 + BGM 混合
 
 ## MiniMax H3 结构化 Prompt 引擎 (v0.2.0)
 
@@ -139,7 +145,7 @@ VL 调用前自动压缩图片：resize 到最长边 2048px，转 JPEG 85% 质�
 - 模板表达式解析（`${params.x}`、`${steps.y.z}`、`${params.arr[0]}`、`${params.seed + 1}`）
 - GPU 调度：按模型家族分类，同族共享 GPU，异族释放
 - Atomic + Script 两种步骤执行器
-- 3 条预置管线：`character-image` / `frame-generate` / `video-generate`
+- 10 条预置管线：`character-image` / `frame-generate` / `scene-frame-generate` / `ref-video-prompt-generate` / `video-generate` / `reference-video-generate` / `video-assemble` / `shot-split` / `script-outline` / `script-parse`
 
 ## 技术栈
 
@@ -233,9 +239,14 @@ src/
 │   │   ├── gpu-scheduler.ts # GPU 调度
 │   │   └─ types.ts
 │   ├── pipeline/         # 业务处理器
-│   │   ├── character-image.ts  # 角色四视图
-│   │   ├── frame-generate.ts   # 首尾帧生成
-│   │   └── video-generate.ts   # 视频生成
+│   │   ├── character-image.ts     # 角色四视图
+│   │   ├── frame-generate.ts      # 首尾帧生成
+│   │   ├── scene-frame-generate.ts # 场景参考帧生成
+│   │   ├── ref-video-prompt-generate.ts # R2V 视频提示词生成
+│   │   ├── video-generate.ts      # 视频生成
+│   │   ├── reference-video-generate.ts # 参考图模式视频生成
+│   │   ├── video-assemble.ts      # 视频合成（转场 + BGM）
+│   │   └── shot-split.ts          # 智能分镜
 │   ├── db/
 │   └── task-queue/         # 后台任务队列
 └── stores/                  # Zustand 状态管理
