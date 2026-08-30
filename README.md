@@ -245,6 +245,7 @@ src/
 
 | 版本 | 内容 |
 |------|------|
+| v0.0.7 | 镜头转场全链路 + H3 跨镜头连续性 + BGM 方案 A 混音 + 提示词优化 + 独立音效优化 |
 | v0.0.6 | H3 Motion Adapter LoRA + 720P upscale；environmentPrompts/characters/timeOfDay/timeline 完整写入 |
 | v0.0.5 | R2V/FL2V 对齐 MiniMax H3 官方 shot-series 格式；角色参考图 guard ⑧ |
 | v0.0.4 | R2V prompt-template 对齐 Ref2VA 6-section 格式 |
@@ -260,6 +261,17 @@ src/
 | `1d92293` | 移除 composite-provider 硬编码 VL_MODEL（qwen3-vl-4b）覆写，VL 调用跟随模型选择器 |
 | `84242fb` | 修复 scene_frame_generate 单次 regenerate 时跳过已完成 asset 导致不生图的问题 |
 | `aaccc42` | 修复 handleShotSplitStream 两个插入点遗漏 environmentPrompts/characters/timeOfDay/timeline |
+
+### v0.0.7（2026-08-30）
+
+| 提交 | 说明 |
+|------|------|
+| `06d2730` | feat(optimize): 独立音效优化——情绪曲线→配乐弧线→逐镜推导 |
+| `8036aed` | refactor(optimize): 增量输出——只输出变化字段，不输出完整 video_prompt |
+| `e84f6b3` | refactor(h3): 生成 prompt 接入配乐叙述原则 |
+| `1234216` | feat(optimize): 视频提示词优化——基于电影工业实践的全剧集多域优化 |
+| `3d38681` | fix(h3): non_diegetic_music 示例改为“持续至视频结束” |
+| `8c73301` | feat(pipeline): 镜头转场全链路 + H3 跨镜头连续性 + BGM 方案A |
 
 ## License
 
