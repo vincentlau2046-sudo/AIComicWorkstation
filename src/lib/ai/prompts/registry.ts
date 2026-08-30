@@ -4994,6 +4994,97 @@ const videoPromptOptimizeDef: PromptDefinition = {
   },
 };
 
+
+// ─── optimize_music ───────────────────────────────────
+
+const OPTIMIZE_MUSIC_SYSTEM = `# ROLE
+你是短剧配乐优化专家。你遵循以下推理链优化全剧集配乐：
+
+Step 1 — 全局情绪曲线分析
+Step 2 — 全局配乐弧线设计  
+Step 3 — 逐镜配乐推导
+
+# METHODOLOGY
+
+## Step 1: 全局情绪曲线分析
+遍历全部镜头的时长、场景、角色、动作，识别情绪起伏：
+buildup(铺垫) → tension(紧张) → climax(高潮) → release(释放) → transition(过渡)
+标注每个镜头在情绪曲线中的位置。
+
+## Step 2: 全局配乐弧线设计
+基于情绪曲线，设计贯穿全剧集的配乐弧线：
+- 主题乐器选择
+- 速度与动态变化时间线（从哪开始 → 经过哪些波折 → 在哪达到高潮 → 如何收束）
+- 沉默段落的位置及其叙事功能（四类合法场景）
+
+## Step 3: 逐镜配乐推导
+基于配乐弧线 + 每镜情绪位置，为每个镜头写出完整的 non_diegetic_music。
+
+# PRINCIPLES
+
+### L-Cut 延续
+上一镜的音乐默认延续到下一镜。每个镜头交界处回答：
+"音乐在此处变化，是因为镜头切换，还是因为剧情需要？"
+- 镜头切换 → 改写为延续
+- 剧情需要 → 保留变化，在 changes 中说明理由
+
+### Hitchcock 沉默
+沉默（渐弱至无 / 骤停）是合法的艺术选择，但仅限以下场景：
+a) 暴风雨前的宁静 — 紧张升级前的刻意留白
+b) 情感孤立 — 角色内心独白/独处时刻
+c) 叙事冲击 — 突然的揭示、转折、意外事件
+d) 对比效果 — 为下一段音乐进入制造反差
+不属上述场景 → 配乐保持延续。
+
+### 格式规范
+non_diegetic_music 为"乐器+速度+动态"的叙事散文。
+正确: "古筝极轻(pp)开始，3.0s渐强至中弱(mp)，持续至镜头结束"
+错误: "[0.0s-3.0s] 古筝pp / [3.0s-6.0s] 渐强至mp"
+
+# FEW-SHOT EXAMPLE
+
+Input（配乐在镜头边界切断）:
+Shot1 non_diegetic_music: 古筝pp开始，3s渐强至mp，6s渐弱至无声。
+Shot2 non_diegetic_music: 箫声pp开始，4s渐强至mf，9s渐弱至无声。
+
+Output:
+{
+  "music_arc": "全剧以古筝独奏开场→Shot2箫声叠入形成双声部→持续推进",
+  "shots": [
+    { "sequence": 1, "non_diegetic_music": "古筝极轻(pp)开始，3.0s渐强至中弱(mp)，持续至镜头结束", "changes": ["L-cut延续——同场景无叙事理由切断"] },
+    { "sequence": 2, "non_diegetic_music": "接续上一镜古筝，中弱(mp)保持，2.0s箫声叠入，渐强至中强(mf)，持续至镜头结束", "changes": ["箫声在2.0s叠入——新角色出场"] }
+  ]
+}`;
+
+const OPTIMIZE_MUSIC_USER_TEMPLATE = `=== 剧集上下文 ===
+标题: {title}
+视觉风格: {visualStyle}
+时代美学: {eraAesthetic}
+情绪方向: {moodDirection}
+色彩基调: {colorPalette}
+
+=== 角色参考 ===
+{characters}
+
+=== 镜头列表（共{shotCount}个，按时间顺序） ===
+{shots_context}
+
+=== 输出要求 ===
+按上述3步推理链输出。每镜 non_diegetic_music 为完整"乐器+速度+动态"散文。
+严格输出 JSON（无 markdown 包裹，无注释）。`;
+
+const optimizeMusiDef: PromptDefinition = {
+  key: "optimize_music",
+  nameKey: "promptTemplates.prompts.optimizeMusi",
+  descriptionKey: "promptTemplates.prompts.optimizeMusiDesc",
+  category: "video",
+  slots: [
+    slot("system", OPTIMIZE_MUSIC_SYSTEM, true),
+    slot("user_template", OPTIMIZE_MUSIC_USER_TEMPLATE, true),
+  ],
+  buildFullPrompt() { return ""; },
+};
+
 export const PROMPT_REGISTRY: PromptDefinition[] = [
   scriptOutlineDef,
   scriptGenerateDef,
@@ -5025,6 +5116,7 @@ export const PROMPT_REGISTRY: PromptDefinition[] = [
   videoH3PromptDef,
   refVideoPromptH3Def,
   videoPromptOptimizeDef,
+  optimizeMusiDef,
   refContentH3Def,
   refConstraintsH3Def,
   fl2vGuideDef,

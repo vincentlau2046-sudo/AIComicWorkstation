@@ -87,6 +87,9 @@ export default function EpisodeStoryboardPage() {
     not_found?: number[];
   } | null>(null);
   const [showOptimizeReport, setShowOptimizeReport] = useState(false);
+  const [generatingMusi, setGeneratingMusi] = useState(false);
+  const [musiReport, setMusiReport] = useState<{ music_arc: string; optimized: number; total: number; not_found?: number[] } | null>(null);
+  const [showMusiReport, setShowMusiReport] = useState(false);
 
   const currentEpisodeId = useProjectStore((s) => s.currentEpisodeId);
   const episodeStoreEpisodes = useEpisodeStore((s) => s.episodes);
@@ -221,7 +224,7 @@ export default function EpisodeStoryboardPage() {
     }).length;
   }, [project?.shots]);
 
-  const anyGenerating = generating || generatingFrames || generatingVideos || generatingSceneFrames || generatingRefImages || generatingVideoPrompts || generatingRefPrompts || generatingOptimize;
+  const anyGenerating = generating || generatingFrames || generatingVideos || generatingSceneFrames || generatingRefImages || generatingVideoPrompts || generatingRefPrompts || generatingOptimize || generatingMusi;
 
   const drawerShots = project.shots;
 
@@ -620,6 +623,36 @@ export default function EpisodeStoryboardPage() {
       toast.error(err instanceof Error ? err.message : "优化失败");
     } finally {
       setGeneratingOptimize(false);
+    }
+  }
+
+  async function handleOptimizeMusi() {
+    if (!project) return;
+    setGeneratingMusi(true);
+    try {
+      const response = await apiFetch(\`/api/projects/\${project.id}/generate\`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "optimize_music",
+          modelConfig: getModelConfig(),
+          episodeId: useProjectStore.getState().currentEpisodeId,
+        }),
+      });
+      const data = await response.json();
+      if (data.error) throw new Error(data.error);
+      setMusiReport(data);
+      setShowMusiReport(true);
+      if (data.not_found?.length) {
+        toast.warning(\`音效优化完成，\${data.not_found.length} 个镜头未找到\`);
+      } else {
+        toast.success(\`已优化 \${data.optimized}/\${data.total} 个镜头\`);
+      }
+      await fetchProject(project.id, useProjectStore.getState().currentEpisodeId!);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "音效优化失败");
+    } finally {
+      setGeneratingMusi(false);
     }
   }
 
@@ -1113,6 +1146,17 @@ export default function EpisodeStoryboardPage() {
                 : <Sparkles className="h-3.5 w-3.5" />}
               {generatingOptimize ? "优化中..." : t("project.batchOptimizeVideoPrompts")}
             </Button>
+            <Button
+              onClick={handleOptimizeMusi}
+              disabled={anyGenerating || shotsWithVideoPrompts !== totalShots}
+              variant="default"
+              size="sm"
+            >
+              {generatingMusi
+                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                : <Sparkles className="h-3.5 w-3.5" />}
+              {generatingMusi ? "优化中..." : t("project.batchOptimizeMusi")}
+            </Button>
           </div>
 
           {/* Row 4: Videos */}
@@ -1401,6 +1445,34 @@ export default function EpisodeStoryboardPage() {
             </div>
             <div className="border-t px-6 py-3 flex justify-end">
               <Button variant="outline" size="sm" onClick={() => setShowOptimizeReport(false)}>关闭</Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showMusiReport && musiReport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowMusiReport(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[85vh] overflow-y-auto mx-4" onClick={e => e.stopPropagation()}>
+            <div className="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between rounded-t-2xl">
+              <div>
+                <h2 className="text-lg font-bold">🎵 音效优化报告</h2>
+                <p className="text-sm text-[--text-muted]">已优化 {musiReport.optimized}/{musiReport.total} 个镜头</p>
+              </div>
+              <button onClick={() => setShowMusiReport(false)} className="text-[--text-muted] hover:text-[--text-primary] text-lg">✕</button>
+            </div>
+            <div className="px-6 py-4 space-y-4 text-sm">
+              <section>
+                <h3 className="font-bold text-amber-600 text-base mb-2">配乐弧线设计</h3>
+                <p className="text-[--text-secondary] leading-relaxed whitespace-pre-line">{musiReport.music_arc}</p>
+              </section>
+              {musiReport.not_found?.length > 0 && (
+                <section className="rounded-md bg-amber-50 border border-amber-200 p-3">
+                  <h3 className="font-bold text-amber-700 text-sm">⚠️ 未找到的镜头</h3>
+                  <p className="text-amber-600 text-xs mt-1">Shot {musiReport.not_found.join(", ")} — 已跳过</p>
+                </section>
+              )}
+            </div>
+            <div className="border-t px-6 py-3 flex justify-end">
+              <Button variant="outline" size="sm" onClick={() => setShowMusiReport(false)}>关闭</Button>
             </div>
           </div>
         </div>
