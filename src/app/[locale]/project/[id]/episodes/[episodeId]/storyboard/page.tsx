@@ -630,7 +630,7 @@ export default function EpisodeStoryboardPage() {
     if (!project) return;
     setGeneratingMusi(true);
     try {
-      const response = await apiFetch(\`/api/projects/\${project.id}/generate\`, {
+      const response = await apiFetch(`/api/projects/${project.id}/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -644,9 +644,9 @@ export default function EpisodeStoryboardPage() {
       setMusiReport(data);
       setShowMusiReport(true);
       if (data.not_found?.length) {
-        toast.warning(\`音效优化完成，\${data.not_found.length} 个镜头未找到\`);
+        toast.warning(`音效优化完成，${data.not_found.length} 个镜头未找到`);
       } else {
-        toast.success(\`已优化 \${data.optimized}/\${data.total} 个镜头\`);
+        toast.success(`已优化 ${data.optimized}/${data.total} 个镜头`);
       }
       await fetchProject(project.id, useProjectStore.getState().currentEpisodeId!);
     } catch (err) {
