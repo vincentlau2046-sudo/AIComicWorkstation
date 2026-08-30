@@ -140,8 +140,8 @@ export function buildRefImagePromptsRequest(
     `- characters 字段必须列出会在此镜头登场的角色名，名字要和上方角色列表完全一致`,
     `- 禁止真实人名（导演/演员/艺术家/品牌/IP）——违反会导致图像 API 400 报错`,
     `- 输出格式严格按 system prompt 要求的 scenes 数组（{ name, prompt }），无 markdown 包裹`,
-    `- 每条 prompt 必须使用 Qwen [tag] 结构化格式：按 [shot][period][scene][lighting][color][atmosphere][style] 顺序排列，每标签一行`,
-    `- prompt 必须覆盖全部 7 个标签，不得遗漏 any 标签`,
+    `- 每条 prompt 必须使用 Qwen [tag] 结构化格式：按 [shot][era][scene][lighting][color][atmosphere][style] 顺序排列，每标签一行`,
+    `- prompt 必须覆盖全部 7 个标签（shot/era/scene/lighting/color/atmosphere/style），不得遗漏`,
   ]
     .filter(Boolean)
     .join("\n");
