@@ -46,7 +46,7 @@ export async function dequeueTasks(
 
   const claimed = await db
     .update(tasks)
-    .set({ status: "running" })
+    .set({ status: "running", updatedAt: new Date() })
     .where(inArray(tasks.id, subquery))
     .returning();
 
@@ -75,7 +75,7 @@ export async function dequeueTask(opts?: {
   // Atomic claim: UPDATE ... WHERE in a single statement to avoid race conditions.
   const [task] = await db
     .update(tasks)
-    .set({ status: "running" })
+    .set({ status: "running", updatedAt: new Date() })
     .where(inArray(tasks.id, subquery))
     .returning();
 
@@ -93,6 +93,10 @@ export async function completeTask(id: string, result: unknown) {
 }
 
 export async function failTask(id: string, error: string) {
+  return failTaskWithRetry(id, error);
+}
+
+export async function failTaskWithRetry(id: string, error: string) {
   const [task] = await db
     .select()
     .from(tasks)
@@ -100,14 +104,33 @@ export async function failTask(id: string, error: string) {
 
   if (!task) return;
 
-  await db
-    .update(tasks)
-    .set({
-      status: "failed",
-      retries: (task.retries ?? 0) + 1,
-      error,
-    })
-    .where(eq(tasks.id, id));
+  const maxRetries = task.maxRetries ?? 3;
+  const newRetries = (task.retries ?? 0) + 1;
+
+  if (newRetries < maxRetries) {
+    // 还有重试次数 → reset pending，10s 后重试
+    await db
+      .update(tasks)
+      .set({
+        status: "pending",
+        retries: newRetries,
+        error,
+        updatedAt: new Date(),
+        scheduledAt: new Date(Date.now() + 10_000),
+      })
+      .where(eq(tasks.id, id));
+  } else {
+    // 超限 → 永久 failed
+    await db
+      .update(tasks)
+      .set({
+        status: "failed",
+        retries: newRetries,
+        error,
+        updatedAt: new Date(),
+      })
+      .where(eq(tasks.id, id));
+  }
 }
 
 export async function getTasksByProject(projectId: string) {

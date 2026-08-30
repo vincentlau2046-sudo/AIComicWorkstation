@@ -5,7 +5,7 @@ import { startWorker } from "@/lib/task-queue";
 
 let bootstrapped = false;
 
-export function bootstrap() {
+export async function bootstrap() {
   if (bootstrapped) return;
   bootstrapped = true;
 
@@ -19,7 +19,7 @@ export function bootstrap() {
   registerPipelineHandlers();
 
   console.log("[Bootstrap] Starting task worker...");
-  startWorker();
+  await startWorker();
 
   console.log("[Bootstrap] Ready.");
 }
