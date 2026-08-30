@@ -110,7 +110,7 @@
         "10",
         0
       ],
-      "scheduler": "simple",
+      "scheduler": "beta",
       "steps": 20,
       "denoise": 1.0
     }
