@@ -2058,6 +2058,46 @@ async function handleShotSplitStream(
     if (epDur?.targetDuration && epDur.targetDuration > 0) targetDuration = epDur.targetDuration;
   }
 
+  // ── 跨EP上下文查询（2026-08-30） ──
+  type PrevEpCtx = { title: string; plotBeats: string[]; closingShots: { sequence: number; prompt: string; narrations: string; transitionOut: string; timeOfDay: string }[] };
+  let prevEpContext: PrevEpCtx | undefined;
+  let isFirstEpisode = false;
+  if (episodeId) {
+    const [curEp] = await db.select({ sequence: episodes.sequence }).from(episodes).where(eq(episodes.id, episodeId));
+    if (curEp) {
+      isFirstEpisode = curEp.sequence === 1;
+      if (curEp.sequence > 1) {
+        const [prevEp] = await db.select().from(episodes).where(
+          and(eq(episodes.projectId, projectId), eq(episodes.sequence, curEp.sequence - 1))
+        );
+        if (prevEp) {
+          const plotBeats = (prevEp.script || "").split("\n").filter((l) => l.trim().startsWith("场景 "));
+          const closingRaw = await db.select({
+            sequence: shots.sequence,
+            prompt: shots.prompt,
+            transitionOut: shots.transitionOut,
+            timeOfDay: shots.timeOfDay,
+            narrations: shots.narrations,
+          }).from(shots).where(
+            and(eq(shots.projectId, projectId), eq(shots.episodeId, prevEp.id))
+          ).orderBy(desc(shots.sequence)).limit(3);
+          const closing = closingRaw.map(r => ({
+            sequence: r.sequence,
+            prompt: r.prompt ?? "",
+            transitionOut: r.transitionOut ?? "fade_out",
+            timeOfDay: r.timeOfDay ?? "午时",
+            narrations: r.narrations ?? "[]",
+          }));
+          prevEpContext = {
+            title: prevEp.title,
+            plotBeats,
+            closingShots: closing.reverse(),
+          };
+        }
+      }
+    }
+  }
+
   const model = createLanguageModel(modelConfig.text);
   const videoMaxDuration = getModelMaxDuration(modelConfig?.video?.modelId);
   const shotSplitSlots = await resolveSlotContents("shot_split", { userId, projectId });
@@ -2108,7 +2148,7 @@ async function handleShotSplitStream(
   // Process chunks concurrently
   const chunkResults = await Promise.all(
     sceneChunks.map(async (chunk, idx) => {
-      let prompt = buildShotSplitPrompt(chunk, characterDescriptions, characterVisualHints, undefined, characterPerformanceStyles.length > 0 ? characterPerformanceStyles : undefined);
+      let prompt = buildShotSplitPrompt(chunk, characterDescriptions, characterVisualHints, undefined, characterPerformanceStyles.length > 0 ? characterPerformanceStyles : undefined, idx === 0 ? prevEpContext : undefined, idx === 0 && isFirstEpisode);
 
       // Inject character relations (drives on-screen interaction framing)
       if (relationsText) prompt += relationsText;

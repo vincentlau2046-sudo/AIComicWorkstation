@@ -246,13 +246,46 @@ export function buildShotSplitPrompt(
   characters: string,
   characterVisualHints?: Array<{ name: string; visualHint: string }>,
   colorPalette?: string,
-  characterPerformanceStyles?: Array<{ name: string; performanceStyle: string }>
+  characterPerformanceStyles?: Array<{ name: string; performanceStyle: string }>,
+  prevEpContext?: {
+    title: string;
+    plotBeats: string[];
+    closingShots: { sequence: number; prompt: string; narrations: string; transitionOut: string; timeOfDay: string }[];
+  },
+  isFirstEpisode?: boolean
 ): string {
   const hintBlock = characterVisualHints?.length
     ? `\n--- 角色视觉标识（必须使用）---\n${characterVisualHints.map((c) => `${c.name}：${c.visualHint}`).join("\n")}\n--- 结束 ---\n\n关键要求：当角色出现在 videoScript、motionScript、startFrame 或 endFrame 中时，必须在角色名后用括号标注视觉标识，且必须完全使用上方提供的原文。示例：天枢真君（银发金瞳）。绝不自行编造替代描述——始终复用上方提供的准确标识文本。`
     : "";
 
-  return `将此剧本拆解为专业的镜头列表，针对 AI 视频生成进行优化。每个镜头应有详细的 startFrame 和 endFrame 描述，使图像生成器可以直接使用，并附上描述两帧之间动作的 motionScript。
+  // Build prefix block for episode-level transition shots
+  let prefixBlock = "";
+  if (prevEpContext) {
+    const closingBlock = prevEpContext.closingShots.map(s =>
+      `  镜头${s.sequence}｜时段:${s.timeOfDay}｜旁白:${s.narrations || "无"}`
+    ).join("\n");
+    prefixBlock = `【前情提要 — 来自上一集「${prevEpContext.title}」】
+
+关键情节脉络：
+${prevEpContext.plotBeats.map(h => `  → ${h}`).join("\n")}
+
+结尾镜头：
+${closingBlock}
+
+结尾转场：${prevEpContext.closingShots[prevEpContext.closingShots.length - 1]?.transitionOut || "fade_out"}
+
+▶ 指令：请将本集第 1 个 shot 设为跨集过渡shot（3-5s），按系统提示词中「跨集过渡shot」规则执行。
+
+`;
+  } else if (isFirstEpisode) {
+    prefixBlock = `【本集为首集 — 剧情导入】
+
+本集为全剧第一集。请将第 1 个 shot 设为剧情导入shot（3-5s），按系统提示词中「剧情导入shot」规则执行。
+
+`;
+  }
+
+  return `${prefixBlock}将此剧本拆解为专业的镜头列表，针对 AI 视频生成进行优化。每个镜头应有详细的 startFrame 和 endFrame 描述，使图像生成器可以直接使用，并附上描述两帧之间动作的 motionScript。
 
 --- 剧本 ---
 ${screenplay}

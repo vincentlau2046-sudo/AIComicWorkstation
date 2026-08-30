@@ -2272,6 +2272,89 @@ Decision rules (by priority):
 5. No more than 2 consecutive dissolves
 ⚠️ When in doubt at a scene-change boundary, default to dissolve; use cut only for continuous action within the same scene.`;
 
+const SHOT_SPLIT_TRANSITION_SHOT_RULES = `## 过渡shot规则（2026-08-30 新增）
+
+过渡shot分三类：剧情导入shot（第1集）、跨集过渡shot（续集首镜）、环境过渡shot（集内场景跳变）。
+三者共享统一字段约束（见末尾）。
+
+### 一、剧情导入shot（第1集首镜——prompt 含【本集为首集 — 剧情导入】标记时）
+当 prompt 头部存在【本集为首集 — 剧情导入】块时，第 1 个 shot 为剧情导入shot：
+- 旁白必须交代故事发生的时代背景、世界观、或主角的初始处境
+- 叙事导向，不抒情。告知观众：\"这是哪个朝代、什么事件、主角是谁、为何在此\"
+- 例：\"大明洪武年间，胡惟庸案牵连无数。流放千里，一个年轻书生在风雪中走上了不归路。\"
+- transitionIn: fade_in（全剧第一镜，从暗场渐显）
+- transitionOut: dissolve
+- 不触发跨集过渡规则（无上集可接）
+
+### 二、跨集过渡shot（prompt 含【前情提要】标记时）
+当 prompt 头部存在【前情提要】块时，第 1 个 shot 为跨集过渡shot：
+- 旁白从上一集的最新事件视角出发，叙事性地解释\"上一集结束之后→故事如何到达本集开场\"
+- 只写事件逻辑（例：\"土围子一战后，林策在广宁卫站住了脚。但军中规矩是——要让老兵服气，还得在校场上过一关。\"），不写情绪
+- transitionIn: dissolve（例外：替代通用规则中全片首镜的 fade_in——当存在【前情提要】时本集第1镜不是真正的"全片首镜"）
+- transitionOut: dissolve
+
+### 三、环境过渡shot（集内场景跳变——LLM 自主判断插入）
+当相邻场景地点不同、或 time_of_day 变化（≥1 时段）、或有明显叙事省略时，
+必须在场景A最后一镜之后、场景B第一镜之前插入一个环境过渡shot。
+- 该 shot 不属于场景A也不属于场景B；sceneTitle 用\"场景过渡\"
+- 旁白从场景A的事件结果衔接到场景B的开场
+- transitionIn: dissolve  transitionOut: dissolve
+- 不需额外指令，LLM 在同一输出中自行插入
+
+### 过渡shot统一字段约束
+- duration: 3-5（短于常规 8-15s）
+- transitionIn/Out：见各类型
+- dialogues: []  innerMonologues: []  characters: []
+- narrations: 必填，1 条，startTime=0，endTime=duration-0.5
+- startFrame: 上一场景/上集的结束环境（与上一镜 endFrame 衔接）
+- endFrame: 下一场景/本集的开始环境
+- environmentPrompts: 单元素（导入shot）或双元素数组
+  [0] = 前环境（纯场景，无角色无动作）
+  [1] = 后环境（纯场景，无角色无动作）
+- cameraDirection: \"static\"
+- time_of_day: 取后场景/本集的时段
+- timeline: \"主线\"
+- soundDesign: 前场景环境音渐隐 → 后场景环境音渐起`;
+
+const SHOT_SPLIT_TRANSITION_SHOT_RULES_EN = `## Transition Shot Rules (added 2026-08-30)
+
+Three types: Prologue shot (Episode 1), Cross-episode transition (Episode 2+), Environment transition (intra-episode scene jumps).
+All three share unified field constraints (see end).
+
+### 1. Prologue Shot (Episode 1, first shot — when prompt contains [First Episode - Prologue])
+The first shot of Episode 1 is a prologue/introduction shot:
+- Narration must establish the historical era, world setting, or protagonist's initial situation
+- Narrative, not emotional. Tell the audience: what dynasty, what event, who is the protagonist, why here
+- Example: \"In the early Ming Dynasty, the Hu Weiyong case ensnared countless. Exiled a thousand li, a young scholar stepped onto the road of no return.\"
+- transitionIn: fade_in (first shot of the entire series)
+- transitionOut: dissolve
+
+### 2. Cross-Episode Transition (when prompt contains [Previous Episode Recap])
+The first shot of this episode is a cross-episode transition shot:
+- Narration bridges from the previous episode's last event to this episode's opening, narratively
+- Write event logic, not emotion
+- transitionIn: dissolve (overrides the default fade_in rule for episode-first-shot)
+- transitionOut: dissolve
+
+### 3. Environment Transition (intra-episode scene jumps — LLM inserts autonomously)
+When adjacent scenes differ in location, time_of_day (>=1 slot), or have narrative ellipsis,
+insert an environment transition shot between them.
+- sceneTitle: \"Scene Transition\"
+- narration bridges from scene A's event outcome to scene B's opening
+- transitionIn: dissolve  transitionOut: dissolve
+
+### Unified Field Constraints for Transition Shots
+- duration: 3-5
+- dialogues: []  innerMonologues: []  characters: []
+- narrations: required, 1 entry, startTime=0, endTime=duration-0.5
+- startFrame: end environment of previous scene/episode
+- endFrame: start environment of next scene/this episode
+- environmentPrompts: single element (prologue) or 2-element array [previous, next]
+- cameraDirection: \"static\"
+- time_of_day: from next scene/this episode
+- timeline: \"主线\" (main timeline)
+- soundDesign: previous environment fades out → next environment fades in`;
+
 const shotSplitDef: PromptDefinition = {
   key: "shot_split",
   nameKey: "promptTemplates.prompts.shotSplit",
@@ -2295,6 +2378,7 @@ const shotSplitDef: PromptDefinition = {
     slot("transition_guide", SHOT_SPLIT_TRANSITION_GUIDE, true, SHOT_SPLIT_TRANSITION_GUIDE_EN),
     slot("language_rules", SHOT_SPLIT_LANGUAGE_RULES, false, SHOT_SPLIT_LANGUAGE_RULES_EN),
     slot("voice_constraint", SHOT_SPLIT_VOICE_CONSTRAINT, true, SHOT_SPLIT_VOICE_CONSTRAINT_EN),
+    slot("transition_shot_rules", SHOT_SPLIT_TRANSITION_SHOT_RULES, true, SHOT_SPLIT_TRANSITION_SHOT_RULES_EN),
   ],
   buildFullPrompt(sc, params) {
     const s = this.slots;
@@ -2380,6 +2464,8 @@ const shotSplitDef: PromptDefinition = {
       cinematography,
       "",
       r("transition_guide"),
+      "",
+      r("transition_shot_rules"),
       "",
       r("language_rules"),
     ].join("\n");

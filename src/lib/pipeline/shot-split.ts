@@ -4,7 +4,7 @@ import { resolveAIProvider } from "@/lib/ai/provider-factory";
 import type { ModelConfigPayload } from "@/lib/ai/provider-factory";
 import { buildShotSplitPrompt } from "@/lib/ai/prompts/shot-split";
 import { resolvePrompt } from "@/lib/ai/prompts/resolver";
-import { eq, and, or, isNull } from "drizzle-orm";
+import { eq, and, or, isNull, desc } from "drizzle-orm";
 import { id as genId } from "@/lib/id";
 import type { Task } from "@/lib/task-queue";
 
@@ -65,6 +65,46 @@ export async function handleShotSplit(task: Task) {
     if (project?.colorPalette) colorPalette = project.colorPalette;
   }
 
+  // ── 跨EP上下文查询（2026-08-30） ──
+  type PrevEpCtx = { title: string; plotBeats: string[]; closingShots: { sequence: number; prompt: string; narrations: string; transitionOut: string; timeOfDay: string }[] };
+  let prevEpContext: PrevEpCtx | undefined;
+  let isFirstEpisode = false;
+  if (payload.episodeId) {
+    const [curEp] = await db.select({ sequence: episodes.sequence }).from(episodes).where(eq(episodes.id, payload.episodeId));
+    if (curEp) {
+      isFirstEpisode = curEp.sequence === 1;
+      if (curEp.sequence > 1) {
+        const [prevEp] = await db.select().from(episodes).where(
+          and(eq(episodes.projectId, payload.projectId), eq(episodes.sequence, curEp.sequence - 1))
+        );
+        if (prevEp) {
+          const plotBeats = (prevEp.script || "").split("\n").filter((l) => l.trim().startsWith("场景 "));
+          const closingRaw = await db.select({
+            sequence: shots.sequence,
+            prompt: shots.prompt,
+            transitionOut: shots.transitionOut,
+            timeOfDay: shots.timeOfDay,
+            narrations: shots.narrations,
+          }).from(shots).where(
+            and(eq(shots.projectId, payload.projectId), eq(shots.episodeId, prevEp.id))
+          ).orderBy(desc(shots.sequence)).limit(3);
+          const closing = closingRaw.map(r => ({
+            sequence: r.sequence,
+            prompt: r.prompt ?? "",
+            transitionOut: r.transitionOut ?? "fade_out",
+            timeOfDay: r.timeOfDay ?? "午时",
+            narrations: r.narrations ?? "[]",
+          }));
+          prevEpContext = {
+            title: prevEp.title,
+            plotBeats,
+            closingShots: closing.reverse(),
+          };
+        }
+      }
+    }
+  }
+
   const systemPrompt = await resolvePrompt("shot_split", {
     userId: payload.userId ?? "",
     projectId: payload.projectId,
@@ -75,7 +115,7 @@ export async function handleShotSplit(task: Task) {
     .filter(c => c.performanceStyle)
     .map(c => ({ name: c.name, performanceStyle: c.performanceStyle! }));
 
-  let userPrompt = buildShotSplitPrompt(payload.screenplay, characterDescriptions, undefined, colorPalette || undefined, performanceStyles.length > 0 ? performanceStyles : undefined) + relationsText;
+  let userPrompt = buildShotSplitPrompt(payload.screenplay, characterDescriptions, undefined, colorPalette || undefined, performanceStyles.length > 0 ? performanceStyles : undefined, prevEpContext, isFirstEpisode) + relationsText;
 
   // Inject world setting
   if (project?.worldSetting) {
