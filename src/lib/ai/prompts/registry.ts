@@ -4333,7 +4333,45 @@ const REF_IMAGE_PROMPTS_RULES_EN = `Rules:
 A scene image = **the physical location / environment space where the characters are**.
 - ✅ Valid: the Hall of Supreme Harmony plaza, a deep bamboo grove, a cliff edge, a ruined palace gate, inside a meditation room, a desolate plain under a blood moon, an underground cell, a pier walkway
 - ❌ Invalid: energy light effects, glowing talismans, branded patterns, close-ups of a lone weapon/prop, character portraits, costumes/accessories, abstract particles`;
-const REF_IMAGE_PROMPTS_FORMAT_EN = `Output a valid JSON array only (no markdown, no code fences, no preamble):`;
+const REF_IMAGE_PROMPTS_FORMAT_EN = `Format rules:
+
+**Qwen Image 2512 Structured Format**
+Scene prompts are passed directly to Qwen Image 2512 (MMDiT architecture — first tags carry highest weight).
+Use \`[tag] value\` format in this exact order:
+
+[shot] shot size + camera angle + focal length
+  e.g. "Wide shot, eye-level, 35mm"
+
+[era] era background
+  Data source: the "Project Era Background" field in the user message (project metaEra), highest priority — extract and reuse verbatim
+  · Priority 1: if "Project Era Background" exists → extract 8-20 words, preserving dynasty + aesthetic keywords
+  · Priority 2: if absent → infer from shot descriptions, must be precise to dynasty/decade level
+  · Forbidden: generic labels like "ancient China" or "old times"
+  e.g. "Early Ming Dynasty Hongwu era, timber-and-iron military aesthetic" / "2020s Shanghai, neon rain"
+
+[scene] scene body + material textures + foreground/midground/background layering
+  e.g. "Grey Ming-era rammed-earth city wall, earthen rampart roots, dark green banner arrays on the horizon"
+
+[lighting] light source direction + quality (hard/soft) + colour temperature + optical phenomena
+  e.g. "Noon hard top-light, heavy short shadows" / "Side-backlight god rays"
+
+[color] colour palette + saturation + contrast
+  e.g. "Grey-white base vs dark green, low saturation high contrast"
+
+[atmosphere] atmospheric particles (fog/dust/smoke/rain) + floor state + weather + seasonal cues
+  e.g. "Dry dust haze, scattered arrows and splintered wood on the ground"
+
+[style] art style + aspect ratio
+  Data source: the "Project Visual Style" field in the user message (project visualStyle), highest priority — extract and reuse verbatim
+  · Priority 1: if "Project Visual Style" exists → extract style name + material description + aspect ratio
+  · Priority 2: if absent → infer from context, must include aspect ratio
+  · Forbidden: do not invent or rewrite the provided visual style description
+  e.g. "3D donghua render, fine materials and volumetric light, 16:9 widescreen" / "Photorealistic cinematography, 2.35:1 scope"
+
+[constraint] No people, text, subtitles, watermarks, or logos anywhere in the frame
+
+**JSON output format**
+Output a valid JSON array only (no markdown, no code fences, no preamble):`;
 
 const refImagePromptsDef: PromptDefinition = {
   key: "ref_image_prompts",
