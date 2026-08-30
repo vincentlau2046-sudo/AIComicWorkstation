@@ -185,56 +185,45 @@ async function concatWithTransitions(
     cmd.input(path.resolve(vp));
   }
 
-  // Build xfade filter chain for video + acrossfade for audio
-  const videoFilters: string[] = [];
-  const audioFilters: string[] = [];
-  let prevVideoLabel = "0:v";
-  let prevAudioLabel = "0:a";
+  // Build xfade filter chain (video only)
+  const filterParts: string[] = [];
+  let prevLabel = "0:v";
   let cumulativeOffset = 0;
 
   for (let i = 0; i < transitions.length; i++) {
     const t = transitions[i];
     const duration = shotDurations[i];
-    const outVideoLabel = i < transitions.length - 1 ? `v${i}` : "vout";
-    const outAudioLabel = i < transitions.length - 1 ? `a${i}` : "aout";
-    const xfadeDur = t === "cut" ? 0 : DEFAULT_XFADE_DURATION;
+    const outLabel = i < transitions.length - 1 ? `v${i}` : "vout";
 
     if (t === "cut") {
       const offset = cumulativeOffset + duration;
-      videoFilters.push(
-        `[${prevVideoLabel}][${i + 1}:v]xfade=transition=fade:duration=0:offset=${offset.toFixed(3)}[${outVideoLabel}]`
+      filterParts.push(
+        `[${prevLabel}][${i + 1}:v]xfade=transition=fade:duration=0:offset=${offset.toFixed(3)}[${outLabel}]`
       );
       cumulativeOffset = offset;
     } else {
+      const xfadeDur = DEFAULT_XFADE_DURATION;
       const offset = cumulativeOffset + duration - xfadeDur;
       const xfadeName = mapTransitionName(t);
-      videoFilters.push(
-        `[${prevVideoLabel}][${i + 1}:v]xfade=transition=${xfadeName}:duration=${xfadeDur}:offset=${offset.toFixed(3)}[${outVideoLabel}]`
+      filterParts.push(
+        `[${prevLabel}][${i + 1}:v]xfade=transition=${xfadeName}:duration=${xfadeDur}:offset=${offset.toFixed(3)}[${outLabel}]`
       );
       cumulativeOffset = offset;
     }
 
-    // Audio: acrossfade for transitions, hard concat for cuts
-    audioFilters.push(
-      `[${prevAudioLabel}][${i + 1}:a]acrossfade=d=${(xfadeDur || 0.01).toFixed(3)}:c1=tri:c2=tri[${outAudioLabel}]`
-    );
-
-    prevVideoLabel = outVideoLabel;
-    prevAudioLabel = outAudioLabel;
+    prevLabel = outLabel;
   }
 
-  const complexFilter = [...videoFilters, ...audioFilters].join(";");
+  const complexFilter = filterParts.join(";");
 
   await new Promise<void>((resolve, reject) => {
     cmd
-      .complexFilter(complexFilter, ["vout", "aout"])
+      .complexFilter(complexFilter, "vout")
       .outputOptions([
         "-c:v", "libx264",
         "-preset", "fast",
         "-crf", "23",
-        "-c:a", "aac",
-        "-map", "[vout]",
-        "-map", "[aout]",
+        "-an",
         "-movflags", "faststart",
       ])
       .output(outputPath)
@@ -242,6 +231,77 @@ async function concatWithTransitions(
       .on("error", (err) => {
         reject(new Error(`FFmpeg xfade concat failed: ${err.message}`));
       })
+      .run();
+  });
+}
+
+/**
+ * Concatenate audio only from source videos using concat demuxer.
+ * Returns path to audio-only file, or null if no audio tracks found.
+ */
+async function concatAudioOnly(
+  videoPaths: string[],
+  outputPath: string,
+  outputDir: string,
+  projectId: string,
+): Promise<string | null> {
+  // Use concat demuxer for audio — same approach as the all-cuts video path
+  const concatListPath = path.resolve(outputDir, `${projectId}-aconcat.txt`);
+  const concatContent = videoPaths
+    .map((p) => `file '${path.resolve(p)}'`)
+    .join("\n");
+  fs.writeFileSync(concatListPath, concatContent);
+
+  return new Promise((resolve, reject) => {
+    ffmpeg()
+      .input(concatListPath)
+      .inputOptions(["-f", "concat", "-safe", "0"])
+      .outputOptions(["-vn", "-c:a", "aac", "-movflags", "faststart"])
+      .output(outputPath)
+      .on("end", () => {
+        fs.unlinkSync(concatListPath);
+        resolve(outputPath);
+      })
+      .on("error", (err) => {
+        // Audio may not exist in source clips — not fatal
+        console.warn(`[FFmpeg] Audio concat skipped: ${err.message}`);
+        try { fs.unlinkSync(concatListPath); } catch {}
+        resolve(null);
+      })
+      .run();
+  });
+}
+
+/**
+ * Merge audio track into a video file, or just rename if no audio.
+ */
+async function mergeAudioToVideo(
+  videoPath: string,
+  audioPath: string | null,
+  outputPath: string,
+): Promise<void> {
+  if (!audioPath || !fs.existsSync(audioPath)) {
+    fs.renameSync(videoPath, outputPath);
+    return;
+  }
+  await new Promise<void>((resolve, reject) => {
+    ffmpeg()
+      .input(videoPath)
+      .input(audioPath)
+      .outputOptions([
+        "-c:v", "copy",
+        "-c:a", "aac",
+        "-map", "0:v",
+        "-map", "1:a",
+        "-shortest",
+        "-movflags", "faststart",
+      ])
+      .output(outputPath)
+      .on("end", () => {
+        fs.unlinkSync(videoPath);
+        resolve();
+      })
+      .on("error", reject)
       .run();
   });
 }
@@ -285,6 +345,12 @@ export async function assembleVideo(params: AssembleParams): Promise<AssembleRes
   // Step 1: Concatenate video clips (with transitions)
   await concatWithTransitions(allPaths, transitions, allDurations, concatOutputPath, projectId, outputDir);
 
+  // Step 1.5: Concatenate audio separately (source clips retain their audio tracks)
+  const audioConcatPath = path.resolve(outputDir, `${projectId}-aconcat-${genId()}.m4a`);
+  const audioFile = await concatAudioOnly(
+    params.videoPaths, audioConcatPath, outputDir, projectId
+  );
+
   // Step 2: Burn in subtitles if any
   let srtPath: string | undefined;
   if (subtitles.length > 0) {
@@ -293,18 +359,22 @@ export async function assembleVideo(params: AssembleParams): Promise<AssembleRes
 
     try {
       await new Promise<void>((resolve, reject) => {
-        ffmpeg()
-          .input(concatOutputPath)
-          .outputOptions([
-            "-y",
-            "-vf", `subtitles='${escapedSrtPath}'`,
-            "-c:v", "libx264",
-            "-preset", "fast",
-            "-crf", "23",
-            "-c:a", "aac",
-            "-movflags", "faststart",
-          ])
-          .output(outputPath)
+        const cmd = ffmpeg().input(concatOutputPath);
+        const outOpts = [
+          "-y",
+          "-vf", `subtitles='${escapedSrtPath}'`,
+          "-c:v", "libx264",
+          "-preset", "fast",
+          "-crf", "23",
+          "-movflags", "faststart",
+        ];
+        if (audioFile && fs.existsSync(audioFile)) {
+          cmd.input(audioFile);
+          outOpts.push("-c:a", "copy", "-map", "0:v", "-map", "1:a");
+        } else {
+          outOpts.push("-c:a", "aac");
+        }
+        cmd.outputOptions(outOpts).output(outputPath)
           .on("end", () => {
             fs.unlinkSync(concatOutputPath);
             // Keep SRT file for external subtitle export
@@ -318,11 +388,11 @@ export async function assembleVideo(params: AssembleParams): Promise<AssembleRes
     } catch (err) {
       // Fallback: skip subtitle burn, use concat output directly
       console.warn(`[FFmpeg] Subtitle burn failed, using concat output: ${err}`);
-      fs.renameSync(concatOutputPath, outputPath);
+      await mergeAudioToVideo(concatOutputPath, audioFile, outputPath);
     }
   } else {
-    // No subtitles, just rename
-    fs.renameSync(concatOutputPath, outputPath);
+    // No subtitles: merge audio into concat video
+    await mergeAudioToVideo(concatOutputPath, audioFile, outputPath);
   }
 
   // Step 3: Mix background music if provided
