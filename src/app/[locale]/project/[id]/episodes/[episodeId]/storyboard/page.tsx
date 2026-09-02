@@ -1137,7 +1137,7 @@ export default function EpisodeStoryboardPage() {
             </Button>
             <Button
               onClick={handleOptimizeVideoPrompts}
-              disabled={anyGenerating || shotsWithVideoPrompts !== totalShots}
+              disabled={anyGenerating || totalShots === 0 || shotsWithVideoPrompts !== totalShots}
               variant="default"
               size="sm"
             >
@@ -1148,7 +1148,7 @@ export default function EpisodeStoryboardPage() {
             </Button>
             <Button
               onClick={handleOptimizeMusi}
-              disabled={anyGenerating || shotsWithVideoPrompts !== totalShots}
+              disabled={anyGenerating || totalShots === 0 || shotsWithVideoPrompts !== totalShots}
               variant="default"
               size="sm"
             >

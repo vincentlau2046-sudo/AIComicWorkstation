@@ -19,7 +19,7 @@ async function callAndValidateAgent(
       { platform: agent.platform as "bailian" | "dify" | "coze", appId: agent.appId, apiKey: agent.apiKey },
       prompt,
     );
-    if (category !== "keyframe_prompts" && category !== "video_prompts") {
+    if (category !== "keyframe_prompts" && category !== "video_prompts" && category !== "publish_md") {
       validateAgentOutput(category, rawText);
     }
     return { text: rawText };
@@ -247,6 +247,10 @@ export async function POST(
 
   if (action === "optimize_music") {
     return handleOptimizeMusi(projectId, userId, payload, modelConfig, episodeId);
+  }
+
+  if (action === "generate_publish_md") {
+    return handleGeneratePublishMd(projectId, userId, payload, modelConfig, episodeId);
   }
 
   if (action === "single_ref_video_prompt") {
@@ -5326,5 +5330,50 @@ async function handleOptimizeVideoPrompts(
     total: allShots.length,
     not_found: notFound.length > 0 ? notFound : undefined,
   });
+}
+
+// ─── generate_publish_md: 生成短视频平台发布说明 .md ─────────────
+
+async function handleGeneratePublishMd(
+  projectId: string,
+  userId: string,
+  payload?: Record<string, unknown>,
+  modelConfig?: ModelConfig,
+  episodeId?: string
+) {
+  const epId = episodeId || payload?.episodeId as string;
+  if (!epId) return NextResponse.json({ error: "episodeId required" }, { status: 400 });
+
+  // 1. 检查是否有绑定 Agent（Agent 路由：构建提示词发往外部 agent）
+  const boundAgent = await findBoundAgent(projectId, "publish_md");
+  if (boundAgent) {
+    const { generatePublishMdPrompt, saveMdContent } = await import("@/lib/export/generate-publish-md");
+    const prompt = await generatePublishMdPrompt({ projectId, episodeId: epId });
+    const agentText = await callAgent(
+      { platform: boundAgent.platform as "bailian" | "dify" | "coze", appId: boundAgent.appId, apiKey: boundAgent.apiKey },
+      prompt,
+    );
+    const filePath = await saveMdContent(agentText, { projectId, episodeId: epId });
+    return NextResponse.json({ content: agentText, filePath });
+  }
+
+  // 2. 内置 LLM 路径
+  try {
+    const { generatePublishMd } = await import("@/lib/export/generate-publish-md");
+    const result = await generatePublishMd({
+      projectId,
+      episodeId: epId,
+      modelConfig,
+    });
+
+    return NextResponse.json({
+      content: result.content,
+      filePath: result.filePath,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "未知错误";
+    console.error("[GeneratePublishMd] Error:", message);
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }
 

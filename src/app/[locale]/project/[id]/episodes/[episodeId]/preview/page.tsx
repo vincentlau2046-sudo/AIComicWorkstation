@@ -9,6 +9,7 @@ import {
   getSceneRefFrameUrl,
   getFirstFrameUrl,
 } from "@/stores/project-store";
+import { useEpisodeStore } from "@/stores/episode-store";
 import { Button } from "@/components/ui/button";
 import { useTranslations } from "next-intl";
 import { uploadUrl } from "@/lib/utils/upload-url";
@@ -20,10 +21,13 @@ import {
   Play,
   Monitor,
   Download,
+  FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiFetch } from "@/lib/api-fetch";
 import { toast } from "sonner";
+import { AgentPicker } from "@/components/agent-picker";
+import { InlineModelPicker } from "@/components/editor/model-selector";
 
 export default function EpisodePreviewPage() {
   const t = useTranslations();
@@ -105,13 +109,51 @@ export default function EpisodePreviewPage() {
     if (!hasValidVideo) return;
     const a = document.createElement("a");
     a.href = uploadUrl(finalVideoUrl!);
-    a.download = `${project!.title || "video"}-final.mp4`;
+    a.download = getExportBaseName() + ".mp4";
     a.click();
+  }
+
+  /** 根据项目+集信息生成规范文件名的基础部分 */
+  function getExportBaseName(): string {
+    const episodes = useEpisodeStore.getState().episodes;
+    const epId = useProjectStore.getState().currentEpisodeId;
+    const ep = episodes.find((e) => e.id === epId);
+    const seq = String(ep?.sequence ?? "").padStart(2, "0");
+    const epTitle = ep?.title ?? "";
+    return [project!.title, `EP${seq}`, epTitle].filter(Boolean).join("-");
   }
 
   function handleModeSwitch(mode: "keyframe" | "reference") {
     setPreviewMode(mode);
     setSelectedShot(0);
+  }
+
+  // ── 发布说明生成 ──
+  const [generatingMd, setGeneratingMd] = useState(false);
+  const [publishMdContent, setPublishMdContent] = useState<string | null>(null);
+
+  async function handleGeneratePublishMd() {
+    if (!project) return;
+    setGeneratingMd(true);
+    try {
+      const res = await apiFetch(`/api/projects/${project.id}/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "generate_publish_md",
+          episodeId: useProjectStore.getState().currentEpisodeId,
+        }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setPublishMdContent(data.content);
+      toast.success("发布说明已生成");
+    } catch (err) {
+      console.error("[GeneratePublishMd] Error:", err);
+      toast.error(err instanceof Error ? err.message : "生成发布说明失败");
+    } finally {
+      setGeneratingMd(false);
+    }
   }
 
   return (
@@ -134,27 +176,90 @@ export default function EpisodePreviewPage() {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          {hasValidVideo && (
-            <Button onClick={handleDownload} size="sm" variant="outline" className="border-emerald-300 text-emerald-700 hover:bg-emerald-100">
-              <Download className="h-3.5 w-3.5" />
-              {t("project.downloadVideo")}
-            </Button>
-          )}
-          <Button
-            onClick={handleAssemble}
-            disabled={assembling}
-            size="sm"
-          >
-            {assembling ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Sparkles className="h-3.5 w-3.5" />
+        <div className="flex items-end flex-col gap-2">
+          <div className="flex items-center gap-2">
+            {hasValidVideo && (
+              <>
+                <Button onClick={handleDownload} size="sm" variant="outline" className="border-emerald-300 text-emerald-700 hover:bg-emerald-100">
+                  <Download className="h-3.5 w-3.5" />
+                  {t("project.downloadVideo")}
+                </Button>
+                <Button
+                  onClick={handleGeneratePublishMd}
+                  disabled={generatingMd}
+                  size="sm"
+                  variant="outline"
+                  className="border-blue-300 text-blue-700 hover:bg-blue-100"
+                >
+                  {generatingMd ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <FileText className="h-3.5 w-3.5" />
+                  )}
+                  {generatingMd ? "生成中..." : "生成发布说明"}
+                </Button>
+              </>
             )}
-            {assembling ? t("common.generating") : t("project.assembleVideo")}
-          </Button>
+            <Button
+              onClick={handleAssemble}
+              disabled={assembling}
+              size="sm"
+            >
+              {assembling ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Sparkles className="h-3.5 w-3.5" />
+              )}
+              {assembling ? t("common.generating") : t("project.assembleVideo")}
+            </Button>
+          </div>
+          {hasValidVideo && (
+            <div className="flex items-center gap-1.5">
+              <AgentPicker projectId={project.id} category="publish_md" />
+              <InlineModelPicker capability="text" />
+            </div>
+          )}
         </div>
       </div>
+
+      {/* 发布说明预览卡片 */}
+      {publishMdContent && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50/50 p-4 space-y-2">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-blue-800">发布说明预览</h3>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  navigator.clipboard.writeText(publishMdContent);
+                  toast.success("已复制到剪贴板");
+                }}
+              >
+                复制
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  const blob = new Blob([publishMdContent], { type: "text/markdown" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = getExportBaseName() + ".md";
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+              >
+                下载 .md
+              </Button>
+            </div>
+          </div>
+          <pre className="max-h-64 overflow-auto rounded-lg bg-white p-3 text-xs text-[--text-secondary] leading-relaxed whitespace-pre-wrap font-mono">
+            {publishMdContent}
+          </pre>
+        </div>
+      )}
 
       {/* Mode switcher — only shown when both modes have videos */}
       {hasBothModes && (

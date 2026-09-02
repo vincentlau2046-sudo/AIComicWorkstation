@@ -376,7 +376,7 @@ function extractJSON(text: string): string {
 
 // ── Schema 校验 ─────────────────────────────────────────────────────
 
-export type AgentCategory = "script_outline" | "script_generate" | "script_parse" | "character_extract" | "shot_split" | "keyframe_prompts" | "video_prompts" | "ref_image_prompts" | "ref_video_prompts";
+export type AgentCategory = "script_outline" | "script_generate" | "script_parse" | "character_extract" | "shot_split" | "keyframe_prompts" | "video_prompts" | "ref_image_prompts" | "ref_video_prompts" | "publish_md";
 
 export function validateAgentOutput(category: AgentCategory, rawText: string): unknown {
   const jsonStr = extractJSON(rawText);

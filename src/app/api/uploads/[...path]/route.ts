@@ -12,6 +12,7 @@ const MIME_TYPES: Record<string, string> = {
   ".mp4": "video/mp4",
   ".webm": "video/webm",
   ".json": "application/json",
+  ".md": "text/markdown",
 };
 
 export async function GET(
